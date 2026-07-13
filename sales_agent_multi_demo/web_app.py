@@ -368,6 +368,7 @@ def web_agent_loop_stream(session: dict):
     yield _sse("agent_start", {"agent": current_agent})
 
     while True:
+        had_text_this_turn = False   # 跟踪这一轮是否有 text 输出(对客户说话了)
         # ── 用 stream API 流式拉取模型输出 ──
         try:
             stream_ctx = client.messages.stream(
@@ -383,6 +384,7 @@ def web_agent_loop_stream(session: dict):
             history.append({"role": "assistant", "content": response.content})
             for block in response.content:
                 if getattr(block, "type", None) == "text" and block.text.strip():
+                    had_text_this_turn = True
                     yield _sse("text_start", {"agent": current_agent})
                     yield _sse("text_delta", {"text": block.text})
                     yield _sse("text_end", {})
@@ -425,6 +427,7 @@ def web_agent_loop_stream(session: dict):
                         if current_block_type == "thinking":
                             yield _sse("thinking_end", {})
                         elif current_block_type == "text":
+                            had_text_this_turn = True
                             yield _sse("text_end", {})
                         elif current_block_type == "tool_use":
                             try:
@@ -506,6 +509,12 @@ def web_agent_loop_stream(session: dict):
             })
 
         history.append({"role": "user", "content": results})
+
+        # ── 如果这一轮对客户说话了,且不是 handoff,停止 loop 等用户回复 ──
+        # (避免 PhoneAgent 输出开场白 + load_skill + todo_write 后继续 loop
+        #  导致重复输出开场白)
+        if had_text_this_turn and handoff_summary is None:
+            break
 
         # ── handoff:切换到 IMAgent,递归继续流式 ──
         if handoff_summary is not None:
