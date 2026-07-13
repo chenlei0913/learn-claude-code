@@ -1,0 +1,776 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>电销 Agent Demo</title>
+<style>
+  :root {
+    --bg: #0f0f1a;
+    --bg-card: #1a1a2e;
+    --bg-input: #16213e;
+    --bg-hover: #1f2940;
+    --border: #2a2a4a;
+    --text: #e0e0e0;
+    --text-dim: #8888aa;
+    --accent: #4ecdc4;
+    --accent-dim: #2a8a85;
+    --agent: #4ecdc4;
+    --user: #f9a826;
+    --danger: #e74c3c;
+    --success: #2ecc71;
+    --warning: #f39c12;
+    --radius: 10px;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  /* ── Header ── */
+  header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 24px;
+    background: var(--bg-card);
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+  }
+  header .title {
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--accent);
+  }
+  header .meta {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    font-size: 12px;
+    color: var(--text-dim);
+  }
+  header .meta .badge {
+    background: var(--bg-input);
+    padding: 4px 12px;
+    border-radius: 20px;
+    border: 1px solid var(--border);
+  }
+  header button {
+    background: var(--danger);
+    color: #fff;
+    border: none;
+    padding: 6px 16px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 12px;
+    transition: opacity .2s;
+  }
+  header button:hover { opacity: .85; }
+
+  /* ── Main Layout ── */
+  .main {
+    display: flex;
+    flex: 1;
+    overflow: hidden;
+  }
+
+  /* ── Chat Area ── */
+  .chat-area {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+  }
+  .chat-messages {
+    flex: 1;
+    overflow-y: auto;
+    padding: 20px 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+  .chat-messages::-webkit-scrollbar { width: 6px; }
+  .chat-messages::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+  .msg {
+    max-width: 75%;
+    padding: 12px 16px;
+    border-radius: var(--radius);
+    font-size: 14px;
+    line-height: 1.6;
+    white-space: pre-wrap;
+    word-break: break-word;
+    animation: fadeIn .3s ease;
+  }
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+
+  .msg.agent {
+    align-self: flex-start;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--agent);
+  }
+  .msg.user {
+    align-self: flex-end;
+    background: var(--bg-input);
+    border-left: 3px solid var(--user);
+  }
+  .msg .role-tag {
+    font-size: 11px;
+    font-weight: 600;
+    margin-bottom: 4px;
+    text-transform: uppercase;
+    letter-spacing: .5px;
+  }
+  .msg.agent .role-tag { color: var(--agent); }
+  .msg.user .role-tag { color: var(--user); }
+
+  .msg.error {
+    align-self: center;
+    background: rgba(231,76,60,.15);
+    border: 1px solid var(--danger);
+    border-radius: var(--radius);
+    max-width: 90%;
+    font-size: 13px;
+    color: var(--danger);
+  }
+
+  .typing-indicator {
+    align-self: flex-start;
+    padding: 12px 20px;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--agent);
+    border-radius: var(--radius);
+    display: flex;
+    gap: 4px;
+  }
+  .typing-indicator span {
+    width: 8px; height: 8px;
+    background: var(--text-dim);
+    border-radius: 50%;
+    animation: bounce 1.4s infinite;
+  }
+  .typing-indicator span:nth-child(2) { animation-delay: .2s; }
+  .typing-indicator span:nth-child(3) { animation-delay: .4s; }
+  @keyframes bounce {
+    0%,60%,100% { transform: translateY(0); opacity: .4; }
+    30% { transform: translateY(-6px); opacity: 1; }
+  }
+
+  /* ── Input Area ── */
+  .chat-input {
+    padding: 12px 24px 16px;
+    background: var(--bg-card);
+    border-top: 1px solid var(--border);
+    display: flex;
+    gap: 10px;
+    flex-shrink: 0;
+  }
+  .chat-input textarea {
+    flex: 1;
+    background: var(--bg-input);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    color: var(--text);
+    padding: 10px 14px;
+    font-size: 14px;
+    font-family: inherit;
+    resize: none;
+    max-height: 120px;
+    transition: border-color .2s;
+  }
+  .chat-input textarea:focus { outline: none; border-color: var(--accent-dim); }
+  .chat-input button {
+    background: var(--accent);
+    color: var(--bg);
+    border: none;
+    padding: 0 24px;
+    border-radius: var(--radius);
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 600;
+    transition: opacity .2s;
+    align-self: stretch;
+  }
+  .chat-input button:disabled { opacity: .4; cursor: not-allowed; }
+
+  /* ── Sidebar ── */
+  .sidebar {
+    width: 360px;
+    background: var(--bg-card);
+    border-left: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  .sidebar-section {
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+  }
+  .sidebar-section:last-child { border-bottom: none; flex: 1; }
+  .sidebar-section h3 {
+    font-size: 12px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: var(--text-dim);
+    padding: 12px 16px 8px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .sidebar-section h3 .count {
+    background: var(--bg-input);
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-size: 11px;
+    color: var(--text);
+  }
+  .sidebar-section .body {
+    padding: 0 16px 12px;
+    overflow-y: auto;
+    max-height: 280px;
+  }
+  .sidebar-section .body::-webkit-scrollbar { width: 4px; }
+  .sidebar-section .body::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+  /* Todo items */
+  .todo-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 8px;
+    border-radius: 6px;
+    font-size: 13px;
+    margin-bottom: 4px;
+    transition: background .2s;
+  }
+  .todo-item:hover { background: var(--bg-hover); }
+  .todo-icon {
+    width: 20px; height: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    font-size: 12px;
+    flex-shrink: 0;
+  }
+  .todo-icon.pending { background: var(--bg-input); color: var(--text-dim); }
+  .todo-icon.in_progress { background: rgba(78,205,196,.2); color: var(--accent); }
+  .todo-icon.completed { background: rgba(46,204,113,.2); color: var(--success); }
+  .todo-text.pending { color: var(--text-dim); }
+  .todo-text.in_progress { color: var(--accent); font-weight: 500; }
+  .todo-text.completed { color: var(--text); text-decoration: line-through; opacity: .6; }
+
+  .empty-hint {
+    color: var(--text-dim);
+    font-size: 12px;
+    padding: 8px 0;
+    text-align: center;
+  }
+
+  /* Tool call items */
+  .tool-item {
+    background: var(--bg-input);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 8px 12px;
+    margin-bottom: 6px;
+    font-size: 12px;
+  }
+  .tool-item .tool-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    cursor: pointer;
+    user-select: none;
+  }
+  .tool-item .tool-name {
+    font-family: 'SF Mono', 'Fira Code', monospace;
+    color: var(--accent);
+    font-weight: 600;
+  }
+  .tool-item .tool-status {
+    font-size: 10px;
+    padding: 2px 6px;
+    border-radius: 4px;
+  }
+  .tool-item .tool-status.ok { background: rgba(46,204,113,.2); color: var(--success); }
+  .tool-item .tool-status.blocked { background: rgba(231,76,60,.2); color: var(--danger); }
+  .tool-item .tool-detail {
+    margin-top: 6px;
+    padding-top: 6px;
+    border-top: 1px solid var(--border);
+    color: var(--text-dim);
+    display: none;
+  }
+  .tool-item.expanded .tool-detail { display: block; }
+  .tool-item .tool-detail pre {
+    font-family: 'SF Mono', 'Fira Code', monospace;
+    font-size: 11px;
+    white-space: pre-wrap;
+    word-break: break-all;
+    margin-top: 4px;
+  }
+  .tool-item .chevron { transition: transform .2s; color: var(--text-dim); }
+  .tool-item.expanded .chevron { transform: rotate(90deg); }
+
+  /* Permission items */
+  .perm-item {
+    background: rgba(231,76,60,.1);
+    border: 1px solid rgba(231,76,60,.3);
+    border-radius: 8px;
+    padding: 8px 12px;
+    margin-bottom: 6px;
+    font-size: 12px;
+  }
+  .perm-item .perm-tool {
+    color: var(--danger);
+    font-weight: 600;
+    font-family: 'SF Mono', 'Fira Code', monospace;
+  }
+  .perm-item .perm-reason {
+    color: var(--text-dim);
+    margin-top: 2px;
+  }
+
+  /* Order submitted highlight */
+  .order-item {
+    background: rgba(46,204,113,.1);
+    border: 1px solid rgba(46,204,113,.3);
+    border-radius: 8px;
+    padding: 8px 12px;
+    margin-bottom: 6px;
+    font-size: 12px;
+  }
+  .order-item .order-id {
+    color: var(--success);
+    font-weight: 600;
+    font-family: 'SF Mono', 'Fira Code', monospace;
+  }
+
+  /* Transfer human */
+  .transfer-item {
+    background: rgba(243,156,18,.1);
+    border: 1px solid rgba(243,156,18,.3);
+    border-radius: 8px;
+    padding: 8px 12px;
+    margin-bottom: 6px;
+    font-size: 12px;
+    color: var(--warning);
+  }
+
+  /* Welcome screen */
+  .welcome {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    flex: 1;
+    gap: 16px;
+    padding: 40px;
+  }
+  .welcome h2 { color: var(--accent); font-size: 22px; }
+  .welcome p { color: var(--text-dim); font-size: 14px; max-width: 400px; text-align: center; line-height: 1.6; }
+  .welcome button {
+    background: var(--accent);
+    color: var(--bg);
+    border: none;
+    padding: 12px 32px;
+    border-radius: var(--radius);
+    font-size: 15px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: opacity .2s;
+  }
+  .welcome button:hover { opacity: .85; }
+  .welcome button:disabled { opacity: .4; cursor: not-allowed; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="title">电销 Agent Demo</div>
+  <div class="meta">
+    <span class="badge">模型: {{ model }}</span>
+    <button onclick="resetSession()">重置会话</button>
+  </div>
+</header>
+
+<div class="main">
+  <!-- Chat -->
+  <div class="chat-area">
+    <div class="chat-messages" id="messages">
+      <div class="welcome" id="welcome">
+        <h2>电销 Agent 测试台</h2>
+        <p>
+          你扮演客户,Agent 会主动联系你推进贷款流程。<br>
+          可以试试:告诉 Agent 手机号 <code style="color:var(--accent)">13800000001</code> 或 <code style="color:var(--accent)">13800000002</code>,
+          或直接说你的需求。
+        </p>
+        <button onclick="startSession()" id="startBtn">开始对话</button>
+      </div>
+    </div>
+    <div class="chat-input">
+      <textarea id="input" rows="1" placeholder="输入客户回复... (Enter 发送, Shift+Enter 换行)" disabled
+        onkeydown="handleKey(event)" oninput="autoResize(this)"></textarea>
+      <button id="sendBtn" onclick="sendMessage()" disabled>发送</button>
+    </div>
+  </div>
+
+  <!-- Sidebar -->
+  <div class="sidebar">
+    <!-- Flow Progress -->
+    <div class="sidebar-section">
+      <h3>流程进度 <span class="count" id="todoCount">0</span></h3>
+      <div class="body" id="todoList">
+        <div class="empty-hint">等待 Agent 建立流程清单...</div>
+      </div>
+    </div>
+
+    <!-- Tool Calls -->
+    <div class="sidebar-section">
+      <h3>工具调用 <span class="count" id="toolCount">0</span></h3>
+      <div class="body" id="toolList">
+        <div class="empty-hint">暂无工具调用</div>
+      </div>
+    </div>
+
+    <!-- Permission & Events -->
+    <div class="sidebar-section">
+      <h3>权限 & 事件 <span class="count" id="permCount">0</span></h3>
+      <div class="body" id="permList">
+        <div class="empty-hint">暂无事件</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+let sessionId = null;
+let isWaiting = false;
+let toolCallCounter = 0;
+
+// ── Start ──
+async function startSession() {
+  document.getElementById('startBtn').disabled = true;
+  document.getElementById('startBtn').textContent = '正在启动...';
+  await callAgent('');
+}
+
+// ── Send message ──
+async function sendMessage() {
+  const input = document.getElementById('input');
+  const text = input.value.trim();
+  if (!text || isWaiting) return;
+
+  addMessage('user', text);
+  input.value = '';
+  autoResize(input);
+
+  await callAgent(text);
+}
+
+// ── Call API ──
+async function callAgent(message) {
+  isWaiting = true;
+  showTyping();
+  setInputEnabled(false);
+
+  try {
+    const resp = await fetch('/api/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ session_id: sessionId, message }),
+    });
+    const data = await resp.json();
+
+    hideTyping();
+
+    if (data.error) {
+      addMessage('error', '错误: ' + data.error);
+      if (data.traceback) console.error(data.traceback);
+    } else {
+      sessionId = data.session_id;
+      if (data.agent_text) {
+        addMessage('agent', data.agent_text);
+      }
+      processEvents(data.events);
+      updateTodos(data.todos);
+    }
+  } catch (err) {
+    hideTyping();
+    addMessage('error', '网络错误: ' + err.message);
+  } finally {
+    isWaiting = false;
+    setInputEnabled(true);
+  }
+}
+
+// ── Reset ──
+async function resetSession() {
+  if (!confirm('确定重置会话?当前对话将清空。')) return;
+
+  try {
+    const resp = await fetch('/api/reset', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ session_id: sessionId }),
+    });
+    const data = await resp.json();
+    sessionId = data.session_id;
+
+    // Clear UI
+    const msgs = document.getElementById('messages');
+    msgs.innerHTML = `<div class="welcome" id="welcome">
+      <h2>电销 Agent 测试台</h2>
+      <p>你扮演客户,Agent 会主动联系你推进贷款流程。<br>
+      可以试试:告诉 Agent 手机号 <code style="color:var(--accent)">13800000001</code> 或 <code style="color:var(--accent)">13800000002</code>,
+      或直接说你的需求。</p>
+      <button onclick="startSession()" id="startBtn">开始对话</button>
+    </div>`;
+
+    document.getElementById('todoList').innerHTML = '<div class="empty-hint">等待 Agent 建立流程清单...</div>';
+    document.getElementById('toolList').innerHTML = '<div class="empty-hint">暂无工具调用</div>';
+    document.getElementById('permList').innerHTML = '<div class="empty-hint">暂无事件</div>';
+    document.getElementById('todoCount').textContent = '0';
+    document.getElementById('toolCount').textContent = '0';
+    document.getElementById('permCount').textContent = '0';
+    toolCallCounter = 0;
+    setInputEnabled(false);
+  } catch (err) {
+    alert('重置失败: ' + err.message);
+  }
+}
+
+// ── UI Helpers ──
+function addMessage(role, text) {
+  const container = document.getElementById('messages');
+  // Remove welcome screen
+  const welcome = document.getElementById('welcome');
+  if (welcome) welcome.remove();
+
+  const div = document.createElement('div');
+  div.className = `msg ${role}`;
+  const tag = role === 'agent' ? 'Agent' : role === 'user' ? '你 / 客户' : '错误';
+  div.innerHTML = `<div class="role-tag">${tag}</div>${escapeHtml(text)}`;
+  container.appendChild(div);
+  scrollBottom();
+}
+
+function showTyping() {
+  const container = document.getElementById('messages');
+  const welcome = document.getElementById('welcome');
+  if (welcome) welcome.remove();
+
+  const div = document.createElement('div');
+  div.className = 'typing-indicator';
+  div.id = 'typing';
+  div.innerHTML = '<span></span><span></span><span></span>';
+  container.appendChild(div);
+  scrollBottom();
+}
+
+function hideTyping() {
+  const t = document.getElementById('typing');
+  if (t) t.remove();
+}
+
+function setInputEnabled(enabled) {
+  document.getElementById('input').disabled = !enabled;
+  document.getElementById('sendBtn').disabled = !enabled;
+  if (enabled) document.getElementById('input').focus();
+}
+
+function scrollBottom() {
+  const c = document.getElementById('messages');
+  c.scrollTop = c.scrollHeight;
+}
+
+function escapeHtml(text) {
+  const div = document.createElement('div');
+  div.textContent = text;
+  return div.innerHTML;
+}
+
+function autoResize(textarea) {
+  textarea.style.height = 'auto';
+  textarea.style.height = Math.min(textarea.scrollHeight, 120) + 'px';
+}
+
+function handleKey(e) {
+  if (e.key === 'Enter' && !e.shiftKey) {
+    e.preventDefault();
+    sendMessage();
+  }
+}
+
+// ── Process events ──
+function processEvents(events) {
+  let permCount = 0;
+
+  events.forEach(ev => {
+    if (ev.type === 'tool_call') {
+      addToolCall(ev);
+    } else if (ev.type === 'tool_result') {
+      updateToolResult(ev);
+    } else if (ev.type === 'tool_detail') {
+      addToolDetail(ev);
+    } else if (ev.type === 'permission_blocked') {
+      addPermissionBlock(ev);
+      permCount++;
+    } else if (ev.type === 'order_submitted') {
+      addOrderEvent(ev);
+      permCount++;
+    } else if (ev.type === 'transfer_human') {
+      addTransferEvent(ev);
+      permCount++;
+    }
+  });
+
+  document.getElementById('permCount').textContent = permCount;
+}
+
+function updateTodos(todos) {
+  const container = document.getElementById('todoList');
+  document.getElementById('todoCount').textContent = todos.length;
+
+  if (!todos || todos.length === 0) {
+    container.innerHTML = '<div class="empty-hint">等待 Agent 建立 流程清单...</div>';
+    return;
+  }
+
+  const icons = { pending: '○', in_progress: '▶', completed: '✓' };
+  container.innerHTML = todos.map(t => `
+    <div class="todo-item">
+      <div class="todo-icon ${t.status}">${icons[t.status] || '○'}</div>
+      <span class="todo-text ${t.status}">${escapeHtml(t.content)}</span>
+    </div>
+  `).join('');
+}
+
+// ── Tool call rendering ──
+function addToolCall(ev) {
+  toolCallCounter++;
+  document.getElementById('toolCount').textContent = toolCallCounter;
+
+  const container = document.getElementById('toolList');
+  // Remove empty hint
+  const hint = container.querySelector('.empty-hint');
+  if (hint) hint.remove();
+
+  const div = document.createElement('div');
+  div.className = 'tool-item';
+  div.id = `tool-${toolCallCounter}`;
+  div.dataset.name = ev.name;
+
+  const inputStr = ev.input ? JSON.stringify(ev.input, null, 2) : '{}';
+
+  div.innerHTML = `
+    <div class="tool-header" onclick="this.parentElement.classList.toggle('expanded')">
+      <div style="display:flex;align-items:center;gap:6px;">
+        <span class="chevron">▶</span>
+        <span class="tool-name">${escapeHtml(ev.name)}</span>
+      </div>
+      <span class="tool-status ok" id="status-${toolCallCounter}">执行中</span>
+    </div>
+    <div class="tool-detail">
+      <span style="color:var(--text-dim);">输入:</span>
+      <pre>${escapeHtml(inputStr)}</pre>
+      <div id="output-${toolCallCounter}"></div>
+    </div>
+  `;
+  container.appendChild(div);
+}
+
+function updateToolResult(ev) {
+  // Find the last tool-item with matching name that's still "执行中"
+  const container = document.getElementById('toolList');
+  const items = container.querySelectorAll(`.tool-item[data-name="${ev.name}"]`);
+
+  for (let i = items.length - 1; i >= 0; i--) {
+    const item = items[i];
+    const statusEl = item.querySelector('.tool-status');
+    if (statusEl && statusEl.textContent === '执行中') {
+      statusEl.textContent = '完成';
+      statusEl.className = 'tool-status ok';
+
+      // Append output
+      const outputDiv = item.querySelector(`[id^="output-"]`);
+      if (outputDiv) {
+        outputDiv.innerHTML = `<span style="color:var(--text-dim);">输出:</span><pre>${escapeHtml(ev.output || '')}</pre>`;
+      }
+      break;
+    }
+  }
+}
+
+function addToolDetail(ev) {
+  // Add a secondary detail under the most recent matching tool-item
+  const container = document.getElementById('toolList');
+  const items = container.querySelectorAll(`.tool-item[data-name="${ev.name}"]`);
+  if (items.length === 0) return;
+
+  const item = items[items.length - 1];
+  const detail = item.querySelector('.tool-detail');
+  if (detail && ev.detail) {
+    const div = document.createElement('div');
+    div.style.marginTop = '4px';
+    div.style.color = 'var(--accent-dim)';
+    div.textContent = ev.detail;
+    detail.insertBefore(div, detail.firstChild);
+  }
+}
+
+function addPermissionBlock(ev) {
+  const container = document.getElementById('permList');
+  const hint = container.querySelector('.empty-hint');
+  if (hint) hint.remove();
+
+  const div = document.createElement('div');
+  div.className = 'perm-item';
+  div.innerHTML = `
+    <span class="perm-tool">⛔ ${escapeHtml(ev.tool || '未知')}</span>
+    <div class="perm-reason">${escapeHtml(ev.reason || '')}</div>
+  `;
+  container.appendChild(div);
+}
+
+function addOrderEvent(ev) {
+  const container = document.getElementById('permList');
+  const hint = container.querySelector('.empty-hint');
+  if (hint) hint.remove();
+
+  const div = document.createElement('div');
+  div.className = 'order-item';
+  div.innerHTML = `
+    <span class="order-id">✓ 订单已提交: ${escapeHtml(ev.order_id || '')}</span>
+    <div style="color:var(--text-dim);margin-top:2px;">客户: ${escapeHtml(ev.order_data?.name || '')} | 金额: ${ev.order_data?.amount || 'N/A'}</div>
+  `;
+  container.appendChild(div);
+}
+
+function addTransferEvent(ev) {
+  const container = document.getElementById('permList');
+  const hint = container.querySelector('.empty-hint');
+  if (hint) hint.remove();
+
+  const div = document.createElement('div');
+  div.className = 'transfer-item';
+  div.textContent = `转人工: ${escapeHtml(ev.reason || '')}`;
+  container.appendChild(div);
+}
+</script>
+</body>
+</html>
