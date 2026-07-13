@@ -383,6 +383,32 @@
   }
   .welcome h2 { color: var(--accent); font-size: 22px; }
   .welcome p { color: var(--text-dim); font-size: 14px; max-width: 400px; text-align: center; line-height: 1.6; }
+  .welcome-form {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    width: 320px;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 24px;
+  }
+  .welcome-form label {
+    font-size: 12px;
+    color: var(--text-dim);
+    margin-bottom: -6px;
+  }
+  .welcome-form input {
+    background: var(--bg-input);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--text);
+    padding: 10px 12px;
+    font-size: 14px;
+    font-family: inherit;
+    transition: border-color .2s;
+  }
+  .welcome-form input:focus { outline: none; border-color: var(--accent-dim); }
   .welcome button {
     background: var(--accent);
     color: var(--bg);
@@ -393,9 +419,15 @@
     font-weight: 600;
     cursor: pointer;
     transition: opacity .2s;
+    margin-top: 4px;
   }
   .welcome button:hover { opacity: .85; }
   .welcome button:disabled { opacity: .4; cursor: not-allowed; }
+  .form-error {
+    color: var(--danger);
+    font-size: 12px;
+    min-height: 14px;
+  }
 </style>
 </head>
 <body>
@@ -415,11 +447,17 @@
       <div class="welcome" id="welcome">
         <h2>电销 Agent 测试台</h2>
         <p>
-          你扮演客户,Agent 会主动联系你推进贷款流程。<br>
-          可以试试:告诉 Agent 手机号 <code style="color:var(--accent)">13800000001</code> 或 <code style="color:var(--accent)">13800000002</code>,
-          或直接说你的需求。
+          模拟外呼场景:填写客户信息后,Agent 会主动拨通电话并开场。<br>
+          你扮演客户接听,与 Agent 对话推进车抵贷流程。
         </p>
-        <button onclick="startSession()" id="startBtn">开始对话</button>
+        <form class="welcome-form" id="startForm" onsubmit="return false;">
+          <label for="customerName">客户姓名</label>
+          <input type="text" id="customerName" placeholder="如:张先生" autocomplete="off">
+          <label for="customerPhone">客户手机号(可选)</label>
+          <input type="text" id="customerPhone" placeholder="如:13800000001" autocomplete="off">
+          <div class="form-error" id="formError"></div>
+          <button type="button" onclick="startSession()" id="startBtn">开始外呼</button>
+        </form>
       </div>
     </div>
     <div class="chat-input">
@@ -464,9 +502,55 @@ let toolCallCounter = 0;
 
 // ── Start ──
 async function startSession() {
-  document.getElementById('startBtn').disabled = true;
-  document.getElementById('startBtn').textContent = '正在启动...';
-  await callAgent('');
+  const name = document.getElementById('customerName').value.trim();
+  const phone = document.getElementById('customerPhone').value.trim();
+  const errEl = document.getElementById('formError');
+  errEl.textContent = '';
+
+  if (!name) {
+    errEl.textContent = '请填写客户姓名';
+    return;
+  }
+
+  const btn = document.getElementById('startBtn');
+  btn.disabled = true;
+  btn.textContent = '正在外呼...';
+
+  isWaiting = true;
+  showTyping();
+  setInputEnabled(false);
+
+  try {
+    const resp = await fetch('/api/start', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ customer_name: name, customer_phone: phone }),
+    });
+    const data = await resp.json();
+    hideTyping();
+
+    if (data.error) {
+      addMessage('error', '错误: ' + data.error);
+      if (data.traceback) console.error(data.traceback);
+      btn.disabled = false;
+      btn.textContent = '开始外呼';
+      isWaiting = false;
+      return;
+    }
+
+    sessionId = data.session_id;
+    if (data.agent_text) addMessage('agent', data.agent_text);
+    processEvents(data.events);
+    updateTodos(data.todos);
+    setInputEnabled(true);
+  } catch (err) {
+    hideTyping();
+    addMessage('error', '网络错误: ' + err.message);
+    btn.disabled = false;
+    btn.textContent = '开始外呼';
+  } finally {
+    isWaiting = false;
+  }
 }
 
 // ── Send message ──
@@ -531,14 +615,22 @@ async function resetSession() {
     const data = await resp.json();
     sessionId = data.session_id;
 
-    // Clear UI
+    // Clear UI — 回到开始表单
     const msgs = document.getElementById('messages');
     msgs.innerHTML = `<div class="welcome" id="welcome">
       <h2>电销 Agent 测试台</h2>
-      <p>你扮演客户,Agent 会主动联系你推进贷款流程。<br>
-      可以试试:告诉 Agent 手机号 <code style="color:var(--accent)">13800000001</code> 或 <code style="color:var(--accent)">13800000002</code>,
-      或直接说你的需求。</p>
-      <button onclick="startSession()" id="startBtn">开始对话</button>
+      <p>
+        模拟外呼场景:填写客户信息后,Agent 会主动拨通电话并开场。<br>
+        你扮演客户接听,与 Agent 对话推进车抵贷流程。
+      </p>
+      <form class="welcome-form" id="startForm" onsubmit="return false;">
+        <label for="customerName">客户姓名</label>
+        <input type="text" id="customerName" placeholder="如:张先生" autocomplete="off">
+        <label for="customerPhone">客户手机号(可选)</label>
+        <input type="text" id="customerPhone" placeholder="如:13800000001" autocomplete="off">
+        <div class="form-error" id="formError"></div>
+        <button type="button" onclick="startSession()" id="startBtn">开始外呼</button>
+      </form>
     </div>`;
 
     document.getElementById('todoList').innerHTML = '<div class="empty-hint">等待 Agent 建立流程清单...</div>';
@@ -635,6 +727,9 @@ function processEvents(events) {
       permCount++;
     } else if (ev.type === 'transfer_human') {
       addTransferEvent(ev);
+      permCount++;
+    } else if (ev.type === 'stage_changed') {
+      addStageChangedEvent(ev);
       permCount++;
     }
   });
@@ -769,6 +864,18 @@ function addTransferEvent(ev) {
   const div = document.createElement('div');
   div.className = 'transfer-item';
   div.textContent = `转人工: ${escapeHtml(ev.reason || '')}`;
+  container.appendChild(div);
+}
+
+function addStageChangedEvent(ev) {
+  const container = document.getElementById('permList');
+  const hint = container.querySelector('.empty-hint');
+  if (hint) hint.remove();
+
+  const div = document.createElement('div');
+  div.style.cssText = 'background:rgba(78,205,196,.1);border:1px solid rgba(78,205,196,.3);border-radius:8px;padding:8px 12px;margin-bottom:6px;font-size:12px;color:var(--accent);';
+  div.innerHTML = `🔄 阶段切换: <strong>${escapeHtml(ev.from || '')}</strong> → <strong>${escapeHtml(ev.to || '')}</strong>
+    <div style="color:var(--text-dim);margin-top:2px;">${escapeHtml(ev.detail || '')}</div>`;
   container.appendChild(div);
 }
 </script>
