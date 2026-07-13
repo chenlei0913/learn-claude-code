@@ -339,6 +339,14 @@ def web_agent_loop(session: dict) -> tuple[list[str], list, list]:
 
 def _sse(event: str, data: dict) -> str:
     """格式化为 SSE 事件块"""
+    # 调试日志:记录非 delta 事件(delta 太多会刷屏)
+    if event not in ('thinking_delta', 'text_delta'):
+        # 提取关键字段
+        keys = {k: data[k] for k in ('agent', 'name', 'from', 'to', 'active_agent', 'blocked', 'reason') if k in data}
+        print(f"[SSE-LOG] {event} {keys}", flush=True)
+    elif event == 'text_delta':
+        # text_delta 只记录长度,不打内容
+        print(f"[SSE-LOG] text_delta len={len(data.get('text', ''))} text={repr(data.get('text','')[:40])}", flush=True)
     return f"event: {event}\ndata: {json.dumps(data, ensure_ascii=False)}\n\n"
 
 
