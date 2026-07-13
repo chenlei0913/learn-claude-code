@@ -80,12 +80,6 @@ def build_initial_prompt(customer_name: str = "", customer_phone: str = "") -> s
         "不要输出任何自我陈述、内心独白、流程说明、计划描述(如\"现在等待客户回应\""
         "\"接下来我要询问意向\"等)。这些思考放到 thinking 块里。"
         "text 里只允许出现你当面跟客户说的话。"
-        "\n\n"
-        "输出顺序要求(必须严格遵守):"
-        "1. 第一轮先调用 load_skill 加载 loan-sales 流程;"
-        "2. 接着调用 todo_write 建立流程阶段清单;"
-        "3. 以上准备工作完成后,才输出开场白 text(确认身份的话)对客户说话。"
-        "即:工具调用在前,开场白 text 在最后。说完开场白就停下等客户回应,不要继续输出。"
     )
 
 
@@ -374,7 +368,6 @@ def web_agent_loop_stream(session: dict):
     yield _sse("agent_start", {"agent": current_agent})
 
     while True:
-        had_text_this_turn = False   # 跟踪这一轮是否有 text 输出(对客户说话了)
         # ── 用 stream API 流式拉取模型输出 ──
         try:
             stream_ctx = client.messages.stream(
@@ -390,7 +383,6 @@ def web_agent_loop_stream(session: dict):
             history.append({"role": "assistant", "content": response.content})
             for block in response.content:
                 if getattr(block, "type", None) == "text" and block.text.strip():
-                    had_text_this_turn = True
                     yield _sse("text_start", {"agent": current_agent})
                     yield _sse("text_delta", {"text": block.text})
                     yield _sse("text_end", {})
@@ -433,7 +425,6 @@ def web_agent_loop_stream(session: dict):
                         if current_block_type == "thinking":
                             yield _sse("thinking_end", {})
                         elif current_block_type == "text":
-                            had_text_this_turn = True
                             yield _sse("text_end", {})
                         elif current_block_type == "tool_use":
                             try:
@@ -515,12 +506,6 @@ def web_agent_loop_stream(session: dict):
             })
 
         history.append({"role": "user", "content": results})
-
-        # ── 如果这一轮对客户说话了,且不是 handoff,停止 loop 等用户回复 ──
-        # (避免 PhoneAgent 输出开场白 + load_skill + todo_write 后继续 loop
-        #  导致重复输出开场白)
-        if had_text_this_turn and handoff_summary is None:
-            break
 
         # ── handoff:切换到 IMAgent,递归继续流式 ──
         if handoff_summary is not None:
