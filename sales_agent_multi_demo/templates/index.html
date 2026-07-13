@@ -208,6 +208,184 @@
     color: var(--danger);
   }
 
+  /* ── Thinking block (collapsible, above message bubble) ── */
+  .thinking-block {
+    align-self: flex-start;
+    max-width: 75%;
+    margin-bottom: 6px;
+    background: rgba(167,139,250,.06);
+    border: 1px solid rgba(167,139,250,.2);
+    border-radius: var(--radius);
+    /* 注意:不要用 overflow:hidden,会裁掉展开后的 think-body。
+       圆角通过子元素自身的 border-radius 维持 */
+    overflow: visible;
+    animation: fadeIn .3s ease;
+  }
+  .thinking-block.im { border-color: rgba(167,139,250,.35); }
+  .thinking-block summary {
+    cursor: pointer;
+    user-select: none;
+    padding: 8px 14px;
+    font-size: 12px;
+    color: var(--im-agent);
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    list-style: none;
+  }
+  .thinking-block summary::-webkit-details-marker { display: none; }
+  .thinking-block summary::before {
+    content: '▶';
+    font-size: 10px;
+    transition: transform .2s;
+    color: var(--text-dim);
+  }
+  .thinking-block[open] summary::before { transform: rotate(90deg); }
+  .thinking-block summary .think-label {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+  .thinking-block summary .think-spinner {
+    width: 10px; height: 10px;
+    border: 1.5px solid rgba(167,139,250,.3);
+    border-top-color: var(--im-agent);
+    border-radius: 50%;
+    animation: spin .8s linear infinite;
+    display: inline-block;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .thinking-block .think-body {
+    padding: 8px 14px 12px;
+    font-size: 12px;
+    line-height: 1.6;
+    color: var(--text-dim);
+    white-space: pre-wrap;
+    word-break: break-word;
+    font-family: 'SF Mono', 'Fira Code', monospace;
+    border-top: 1px solid rgba(167,139,250,.15);
+    max-height: 320px;
+    overflow-y: auto;
+  }
+  .thinking-block .think-body::-webkit-scrollbar { width: 4px; }
+  .thinking-block .think-body::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+  /* ── Tool call block (collapsible, inline in chat) ── */
+  .tool-block {
+    align-self: flex-start;
+    max-width: 75%;
+    margin-bottom: 6px;
+    background: rgba(78,205,196,.05);
+    border: 1px solid rgba(78,205,196,.2);
+    border-radius: var(--radius);
+    overflow: visible;
+    animation: fadeIn .3s ease;
+  }
+  .tool-block.im-tool {
+    background: rgba(167,139,250,.05);
+    border-color: rgba(167,139,250,.25);
+  }
+  .tool-block summary {
+    cursor: pointer;
+    user-select: none;
+    padding: 8px 14px;
+    font-size: 12px;
+    color: var(--accent);
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    list-style: none;
+  }
+  .tool-block.im-tool summary { color: var(--im-agent); }
+  .tool-block summary::-webkit-details-marker { display: none; }
+  .tool-block summary::before {
+    content: '▶';
+    font-size: 10px;
+    transition: transform .2s;
+    color: var(--text-dim);
+  }
+  .tool-block[open] summary::before { transform: rotate(90deg); }
+  .tool-block summary .tool-label {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    font-family: 'SF Mono', 'Fira Code', monospace;
+  }
+  .tool-block summary .tool-spinner {
+    width: 10px; height: 10px;
+    border: 1.5px solid rgba(78,205,196,.3);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin .8s linear infinite;
+    display: inline-block;
+  }
+  .tool-block.im-tool summary .tool-spinner {
+    border-color: rgba(167,139,250,.3);
+    border-top-color: var(--im-agent);
+  }
+  .tool-block summary .tool-status-tag {
+    margin-left: auto;
+    font-size: 10px;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-weight: 500;
+    font-family: -apple-system, sans-serif;
+  }
+  .tool-block summary .tool-status-tag.running {
+    background: rgba(78,205,196,.2);
+    color: var(--accent);
+  }
+  .tool-block.im-tool summary .tool-status-tag.running {
+    background: rgba(167,139,250,.2);
+    color: var(--im-agent);
+  }
+  .tool-block summary .tool-status-tag.ok {
+    background: rgba(46,204,113,.2);
+    color: var(--success);
+  }
+  .tool-block summary .tool-status-tag.blocked {
+    background: rgba(231,76,60,.2);
+    color: var(--danger);
+  }
+  .tool-block .tool-body {
+    padding: 8px 14px 12px;
+    font-size: 12px;
+    line-height: 1.6;
+    color: var(--text-dim);
+    border-top: 1px solid rgba(78,205,196,.15);
+    max-height: 280px;
+    overflow-y: auto;
+  }
+  .tool-block.im-tool .tool-body { border-top-color: rgba(167,139,250,.15); }
+  .tool-block .tool-body::-webkit-scrollbar { width: 4px; }
+  .tool-block .tool-body::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+  .tool-block .tool-body .field-label {
+    color: var(--text);
+    font-weight: 600;
+    margin-top: 6px;
+    margin-bottom: 2px;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: .5px;
+  }
+  .tool-block .tool-body .field-label:first-child { margin-top: 0; }
+  .tool-block .tool-body pre {
+    font-family: 'SF Mono', 'Fira Code', monospace;
+    font-size: 11px;
+    white-space: pre-wrap;
+    word-break: break-all;
+    color: var(--text-dim);
+    margin: 0;
+  }
+  .tool-block .tool-body .detail-line {
+    color: var(--accent-dim);
+    font-size: 11px;
+    margin-top: 4px;
+  }
+  .tool-block.im-tool .tool-body .detail-line { color: var(--im-agent-dim); }
+
   /* Agent switch divider in chat */
   .agent-switch-divider {
     align-self: center;
@@ -711,6 +889,20 @@
       max-width: 90%;
       text-align: center;
     }
+    .thinking-block {
+      max-width: 88%;
+    }
+    .thinking-block .think-body {
+      max-height: 240px;
+      font-size: 11px;
+    }
+    .tool-block {
+      max-width: 88%;
+    }
+    .tool-block .tool-body {
+      max-height: 220px;
+      font-size: 11px;
+    }
   }
 
   /* Sidebar close button — hidden on desktop */
@@ -893,40 +1085,17 @@ async function startSession() {
 
   currentAgent = 'phone';
   isWaiting = true;
-  showTyping();
   setInputEnabled(false);
 
   try {
-    const resp = await fetch('/api/start', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ customer_name: name, customer_phone: phone }),
-    });
-    const data = await resp.json();
-    hideTyping();
-
-    if (data.error) {
-      addMessage('error', '错误: ' + data.error);
-      if (data.traceback) console.error(data.traceback);
-      btn.disabled = false;
-      btn.textContent = '开始外呼';
-      isWaiting = false;
-      return;
-    }
-
-    sessionId = data.session_id;
-    renderAgentText(data);
-    processEvents(data.events);
-    updateTodos(data.todos);
-    updateAgentIndicator(data.active_agent);
-    setInputEnabled(true);
+    await streamSSE('/api/start', { customer_name: name, customer_phone: phone });
   } catch (err) {
-    hideTyping();
     addMessage('error', '网络错误: ' + err.message);
-    btn.disabled = false;
-    btn.textContent = '开始外呼';
   } finally {
     isWaiting = false;
+    btn.disabled = false;
+    btn.textContent = '开始外呼';
+    setInputEnabled(true);  // 外呼完成后启用输入框
   }
 }
 
@@ -940,37 +1109,11 @@ async function sendMessage() {
   input.value = '';
   autoResize(input);
 
-  await callAgent(text);
-}
-
-// ── Call API ──
-async function callAgent(message) {
   isWaiting = true;
-  showTyping();
   setInputEnabled(false);
-
   try {
-    const resp = await fetch('/api/chat', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ session_id: sessionId, message }),
-    });
-    const data = await resp.json();
-
-    hideTyping();
-
-    if (data.error) {
-      addMessage('error', '错误: ' + data.error);
-      if (data.traceback) console.error(data.traceback);
-    } else {
-      sessionId = data.session_id;
-      renderAgentText(data);
-      processEvents(data.events);
-      updateTodos(data.todos);
-      updateAgentIndicator(data.active_agent);
-    }
+    await streamSSE('/api/chat', { session_id: sessionId, message: text });
   } catch (err) {
-    hideTyping();
     addMessage('error', '网络错误: ' + err.message);
   } finally {
     isWaiting = false;
@@ -978,24 +1121,344 @@ async function callAgent(message) {
   }
 }
 
-// ── Render agent text (支持 segments 按 agent 标注) ──
-function renderAgentText(data) {
-  if (data.agent_segments && data.agent_segments.length > 0) {
-    // 按 agent 分段渲染,handoff 时会有 phone + im 两段
-    let lastAgent = null;
-    data.agent_segments.forEach(seg => {
-      // 检测 agent 切换,插入分隔线
-      if (lastAgent && lastAgent !== seg.agent) {
-        addAgentSwitchDivider(lastAgent, seg.agent);
-      }
-      addAgentMessage(seg.agent, seg.text);
-      lastAgent = seg.agent;
-    });
-  } else if (data.agent_text) {
-    // fallback: 用 active_agent 标注
-    const agent = data.active_agent || 'phone';
-    addAgentMessage(agent, data.agent_text);
+// ═══════════════════════════════════════════════════════════
+//  SSE Streaming — fetch + ReadableStream 解析 event-stream
+//  后端事件:
+//    session / agent_start / thinking_start / thinking_delta / thinking_end
+//    text_start / text_delta / text_end
+//    tool_call / tool_detail / tool_result / todos_updated
+//    permission_blocked / order_submitted / transfer_human / agent_changed
+//    error / done
+// ═══════════════════════════════════════════════════════════
+async function streamSSE(url, body) {
+  const resp = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+
+  if (!resp.ok) {
+    let msg = `HTTP ${resp.status}`;
+    try { msg += ': ' + (await resp.json()).error; } catch (_) {}
+    addMessage('error', '错误: ' + msg);
+    return;
   }
+
+  const ct = resp.headers.get('content-type') || '';
+  if (!ct.includes('text/event-stream')) {
+    const data = await resp.json();
+    if (data.error) {
+      addMessage('error', '错误: ' + data.error);
+      if (data.traceback) console.error(data.traceback);
+    }
+    return;
+  }
+
+  // 流式状态
+  let thinkingEl = null;
+  let thinkingBodyEl = null;
+  let thinkingTextBuf = '';
+  let messageEl = null;
+  let messageTextBuf = '';
+  let toolBlockEl = null;
+  let toolBlockBodyEl = null;
+  let toolDetailsBuf = [];
+  let lastAgent = null;
+  let hadAnyOutput = false;
+  let typingShown = false;
+
+  const reader = resp.body.getReader();
+  const decoder = new TextDecoder('utf-8');
+  let buffer = '';
+
+  function handleEvent(eventType, dataStr) {
+    let data = {};
+    try { data = JSON.parse(dataStr); } catch (_) { data = {}; }
+
+    switch (eventType) {
+      case 'session':
+        sessionId = data.session_id || sessionId;
+        break;
+
+      case 'agent_start': {
+        const agent = data.agent || 'phone';
+        if (lastAgent && lastAgent !== agent && hadAnyOutput) {
+          addAgentSwitchDivider(lastAgent, agent);
+        }
+        lastAgent = agent;
+        currentAgent = agent;
+        updateAgentIndicator(agent);
+        if (!hadAnyOutput && !typingShown) {
+          showTyping();
+          typingShown = true;
+        }
+        break;
+      }
+
+      case 'thinking_start': {
+        if (typingShown) { hideTyping(); typingShown = false; }
+        hadAnyOutput = true;
+        const agent = data.agent || currentAgent;
+        thinkingEl = createThinkingBlock(agent);
+        thinkingBodyEl = thinkingEl.querySelector('.think-body');
+        thinkingTextBuf = '';
+        thinkingEl.open = true;
+        document.getElementById('messages').appendChild(thinkingEl);
+        scrollBottom();
+        break;
+      }
+
+      case 'thinking_delta': {
+        if (thinkingBodyEl) {
+          thinkingTextBuf += data.text || '';
+          thinkingBodyEl.textContent = thinkingTextBuf;
+          scrollBottom();
+        }
+        break;
+      }
+
+      case 'thinking_end': {
+        if (thinkingEl) {
+          thinkingEl.open = false;
+          const spinner = thinkingEl.querySelector('.think-spinner');
+          if (spinner) spinner.remove();
+          const labelEl = thinkingEl.querySelector('.think-label');
+          if (labelEl) {
+            labelEl.innerHTML = `💭 思考过程 (${thinkingTextBuf.length} 字)`;
+          }
+          thinkingEl = null;
+          thinkingBodyEl = null;
+        }
+        break;
+      }
+
+      case 'text_start': {
+        if (typingShown) { hideTyping(); typingShown = false; }
+        hadAnyOutput = true;
+        const agent = data.agent || currentAgent;
+        messageEl = createStreamingMessage(agent);
+        messageTextBuf = '';
+        document.getElementById('messages').appendChild(messageEl);
+        scrollBottom();
+        break;
+      }
+
+      case 'text_delta': {
+        if (messageEl) {
+          messageTextBuf += data.text || '';
+          const textNode = messageEl.querySelector('.msg-text');
+          if (textNode) {
+            textNode.textContent = messageTextBuf;
+            scrollBottom();
+          }
+        }
+        break;
+      }
+
+      case 'text_end': {
+        if (messageEl) {
+          if (!messageTextBuf.trim()) {
+            messageEl.remove();
+          }
+          messageEl = null;
+          messageTextBuf = '';
+        }
+        break;
+      }
+
+      case 'tool_call': {
+        addToolCall(data);
+        bumpSidebarBadge(1);
+        if (typingShown) { hideTyping(); typingShown = false; }
+        hadAnyOutput = true;
+        toolBlockEl = createToolBlock(data.name, currentAgent);
+        toolBlockBodyEl = toolBlockEl.querySelector('.tool-body');
+        toolDetailsBuf = [];
+        const inputStr = data.input ? JSON.stringify(data.input, null, 2) : '{}';
+        toolBlockBodyEl.innerHTML = `
+          <div class="field-label">输入</div>
+          <pre>${escapeHtml(inputStr)}</pre>
+          <div class="tool-detail-list"></div>
+          <div class="tool-output-slot"></div>
+        `;
+        toolBlockEl.open = false;
+        document.getElementById('messages').appendChild(toolBlockEl);
+        scrollBottom();
+        break;
+      }
+
+      case 'tool_detail': {
+        addToolDetail(data);
+        if (toolBlockBodyEl && data.detail) {
+          toolDetailsBuf.push(data.detail);
+          const listEl = toolBlockBodyEl.querySelector('.tool-detail-list');
+          if (listEl) {
+            const div = document.createElement('div');
+            div.className = 'detail-line';
+            div.textContent = '• ' + data.detail;
+            listEl.appendChild(div);
+          }
+          scrollBottom();
+        }
+        break;
+      }
+
+      case 'tool_result': {
+        updateToolResult(data);
+        if (toolBlockEl) {
+          const outputSlot = toolBlockEl.querySelector('.tool-output-slot');
+          if (outputSlot && data.output) {
+            const blocked = data.blocked === true;
+            outputSlot.innerHTML = `
+              <div class="field-label">${blocked ? '拦截原因' : '输出'}</div>
+              <pre>${escapeHtml(data.output)}</pre>
+            `;
+          }
+          const statusTag = toolBlockEl.querySelector('.tool-status-tag');
+          if (statusTag) {
+            const spinner = toolBlockEl.querySelector('.tool-spinner');
+            if (spinner) spinner.remove();
+            if (data.blocked === true) {
+              statusTag.textContent = '已拦截';
+              statusTag.className = 'tool-status-tag blocked';
+            } else {
+              statusTag.textContent = '已完成';
+              statusTag.className = 'tool-status-tag ok';
+            }
+          }
+          toolBlockEl = null;
+          toolBlockBodyEl = null;
+          toolDetailsBuf = [];
+        }
+        break;
+      }
+
+      case 'todos_updated':
+        updateTodos(data.todos || []);
+        break;
+
+      case 'permission_blocked':
+        addPermissionBlock(data);
+        bumpSidebarBadge(1);
+        break;
+
+      case 'order_submitted':
+        addOrderEvent(data);
+        bumpSidebarBadge(1);
+        break;
+
+      case 'transfer_human':
+        addTransferEvent(data);
+        bumpSidebarBadge(1);
+        break;
+
+      case 'agent_changed': {
+        addAgentChangedEvent(data);
+        bumpSidebarBadge(1);
+        if (data.from && data.to) {
+          addAgentSwitchDivider(data.from, data.to);
+        }
+        currentAgent = data.to || currentAgent;
+        updateAgentIndicator(currentAgent);
+        lastAgent = data.to || lastAgent;
+        hadAnyOutput = false;
+        break;
+      }
+
+      case 'error': {
+        if (typingShown) { hideTyping(); typingShown = false; }
+        addMessage('error', '错误: ' + (data.error || '未知错误'));
+        if (data.traceback) console.error(data.traceback);
+        break;
+      }
+
+      case 'done': {
+        if (typingShown) { hideTyping(); typingShown = false; }
+        updateAgentIndicator(data.active_agent || currentAgent);
+        break;
+      }
+    }
+  }
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+
+      let idx;
+      while ((idx = buffer.indexOf('\n\n')) !== -1) {
+        const chunk = buffer.slice(0, idx);
+        buffer = buffer.slice(idx + 2);
+        let eventType = 'message';
+        let dataLines = [];
+        for (const line of chunk.split('\n')) {
+          if (line.startsWith('event:')) {
+            eventType = line.slice(6).trim();
+          } else if (line.startsWith('data:')) {
+            dataLines.push(line.slice(5).trim());
+          }
+        }
+        if (dataLines.length > 0) {
+          handleEvent(eventType, dataLines.join('\n'));
+        }
+      }
+    }
+  } finally {
+    if (typingShown) { hideTyping(); }
+  }
+}
+
+// ── Create a collapsible thinking block ──
+function createThinkingBlock(agent) {
+  const div = document.createElement('details');
+  div.className = agent === 'im' ? 'thinking-block im' : 'thinking-block';
+  div.innerHTML = `
+    <summary>
+      <span class="think-label">
+        <span class="think-spinner"></span>
+        💭 思考中...
+      </span>
+    </summary>
+    <div class="think-body"></div>
+  `;
+  return div;
+}
+
+// ── Create an empty streaming message bubble (text filled by deltas) ──
+function createStreamingMessage(agent) {
+  const container = document.getElementById('messages');
+  const welcome = document.getElementById('welcome');
+  if (welcome) welcome.remove();
+
+  const div = document.createElement('div');
+  div.className = agent === 'im' ? 'msg agent im' : 'msg agent';
+  const label = agent === 'im' ? '[IMAgent]' : '[PhoneAgent]';
+  div.innerHTML = `<div class="role-tag">${label}</div><span class="msg-text"></span>`;
+  return div;
+}
+
+// ── Create a collapsible tool-call block (inline in chat) ──
+function createToolBlock(toolName, agent) {
+  const container = document.getElementById('messages');
+  const welcome = document.getElementById('welcome');
+  if (welcome) welcome.remove();
+
+  const isIm = agent === 'im';
+  const div = document.createElement('details');
+  div.className = isIm ? 'tool-block im-tool' : 'tool-block';
+  const icon = '🔧';
+  div.innerHTML = `
+    <summary>
+      <span class="tool-label">
+        <span class="tool-spinner"></span>
+        ${icon} ${escapeHtml(toolName)}
+      </span>
+      <span class="tool-status-tag running">执行中</span>
+    </summary>
+    <div class="tool-body"></div>
+  `;
+  return div;
 }
 
 // ── Reset ──
