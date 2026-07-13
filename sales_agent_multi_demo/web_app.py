@@ -614,6 +614,54 @@ def reset():
     return jsonify({"session_id": new_id, "message": "会话已重置"})
 
 
+@app.route("/api/test_im")
+def test_im():
+    """测试端点:直接构造一个已 handoff 的 IMAgent session,SSE 流式返回。
+    用于排查 IMAgent 阶段文本是否正常显示。"""
+    session = {
+        "customer_name": "测试IM", "customer_phone": "13800000001",
+        "active_agent": "im",
+        "handoff_summary": "客户张先生,电话13800000001,同意加微信,微信账号:zhang_test",
+        "phone_history": [{"role": "user", "content": "开始"}],
+        "im_history": [{
+            "role": "user",
+            "content": (
+                "(场景:你是 IMAgent,PhoneAgent 已完成电话阶段的初筛和加好友,"
+                "现在切换到微信沟通。\n"
+                "PhoneAgent 传来的客户信息总结:\n客户张先生,同意加微信\n\n"
+                "请基于以上信息,开始与客户在微信上沟通。第一步是收集行驶证照片。\n"
+                "需要时用 load_skill 加载 loan-sales 流程。)"
+            ),
+        }],
+        "todos": [], "started": True,
+    }
+
+    def generate():
+        yield _sse("session", {"session_id": "test-im-session"})
+        yield _sse("agent_changed", {
+            "from": "phone", "to": "im",
+            "summary": "客户张先生,同意加微信",
+        })
+        try:
+            yield from web_agent_loop_stream(session)
+        except Exception as e:
+            import traceback
+            yield _sse("error", {
+                "error": str(e),
+                "traceback": traceback.format_exc(),
+            })
+
+    return Response(
+        stream_with_context(generate()),
+        mimetype="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+            "Connection": "keep-alive",
+        },
+    )
+
+
 # ═══════════════════════════════════════════════════════════
 #  主程序
 # ═══════════════════════════════════════════════════════════

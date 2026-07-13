@@ -1,0 +1,606 @@
+event: agent_start
+data: {"agent": "im"}
+
+event: thinking_start
+data: {"agent": "im"}
+
+event: thinking_delta
+data: {"text": "The"}
+
+event: thinking_delta
+data: {"text": " user is"}
+
+event: thinking_delta
+data: {"text": " sim"}
+
+event: thinking_delta
+data: {"text": "ulating a"}
+
+event: thinking_delta
+data: {"text": " scenario where"}
+
+event: thinking_delta
+data: {"text": " I'm"}
+
+event: thinking_delta
+data: {"text": " the I"}
+
+event: thinking_delta
+data: {"text": "MAgent"}
+
+event: thinking_delta
+data: {"text": " and Phone"}
+
+event: thinking_delta
+data: {"text": "Agent"}
+
+event: thinking_delta
+data: {"text": " has completed"}
+
+event: thinking_delta
+data: {"text": " the phone"}
+
+event: thinking_delta
+data: {"text": " phase"}
+
+event: thinking_delta
+data: {"text": ". I"}
+
+event: thinking_delta
+data: {"text": " need to"}
+
+event: thinking_delta
+data: {"text": " start"}
+
+event: thinking_delta
+data: {"text": " communicating with"}
+
+event: thinking_delta
+data: {"text": " the customer"}
+
+event: thinking_delta
+data: {"text": " ("}
+
+event: thinking_delta
+data: {"text": "Mr."}
+
+event: thinking_delta
+data: {"text": " Zhang)"}
+
+event: thinking_delta
+data: {"text": " on"}
+
+event: thinking_delta
+data: {"text": " WeChat"}
+
+event: thinking_delta
+data: {"text": ". Let"}
+
+event: thinking_delta
+data: {"text": " me first"}
+
+event: thinking_delta
+data: {"text": " load"}
+
+event: thinking_delta
+data: {"text": " the loan"}
+
+event: thinking_delta
+data: {"text": "-sales skill"}
+
+event: thinking_delta
+data: {"text": " to understand"}
+
+event: thinking_delta
+data: {"text": " the full"}
+
+event: thinking_delta
+data: {"text": " process,"}
+
+event: thinking_delta
+data: {"text": " then start"}
+
+event: thinking_delta
+data: {"text": " the conversation"}
+
+event: thinking_delta
+data: {"text": ".\n\nThe"}
+
+event: thinking_delta
+data: {"text": " first step"}
+
+event: thinking_delta
+data: {"text": " is to"}
+
+event: thinking_delta
+data: {"text": " collect the"}
+
+event: thinking_delta
+data: {"text": " driving"}
+
+event: thinking_delta
+data: {"text": " license photo"}
+
+event: thinking_delta
+data: {"text": ". Let"}
+
+event: thinking_delta
+data: {"text": " me load"}
+
+event: thinking_delta
+data: {"text": " the skill"}
+
+event: thinking_delta
+data: {"text": " first and"}
+
+event: thinking_delta
+data: {"text": " then initiate"}
+
+event: thinking_delta
+data: {"text": " the conversation"}
+
+event: thinking_delta
+data: {"text": "."}
+
+event: thinking_end
+data: {}
+
+event: tool_call
+data: {"name": "load_skill", "input": {"name": "loan-sales"}}
+
+event: tool_detail
+data: {"type": "tool_detail", "name": "load_skill", "detail": "加载技能: loan-sales", "output_preview": "---\nname: loan-sales\ndescription: 车抵贷电销+IM多Agent流程 — PhoneAgent负责电话初筛+加好友,IMAgent负责IM收资料+提交订单\n---\n\n# 车抵贷电销+IM 多 Agent 流程\n\n## 架构说明(多 Agent 版)\n\n本流程由**两个独立 Agent** 协作完成,通过 `handoff_to_im` 工具切换:\n\n| Agent | 职责 | 阶段 | 工具 |\n|-------|------|------|------|\n| **PhoneAgent** | 电话外呼:身份确认 + 意向初筛 + 加微信好友 | phone "}
+
+event: tool_result
+data: {"name": "load_skill", "output": "---\nname: loan-sales\ndescription: 车抵贷电销+IM多Agent流程 — PhoneAgent负责电话初筛+加好友,IMAgent负责IM收资料+提交订单\n---\n\n# 车抵贷电销+IM 多 Agent 流程\n\n## 架构说明(多 Agent 版)\n\n本流程由**两个独立 Agent** 协作完成,通过 `handoff_to_im` 工具切换:\n\n| Agent | 职责 | 阶段 | 工具 |\n|-------|------|------|------|\n| **PhoneAgent** | 电话外呼:身份确认 + 意向初筛 + 加微信好友 | phone | load_skill, todo_write, send_friend_request, check_friend_added, handoff_to_im, transfer_human |\n| **IMAgent** | IM沟通:收集行驶证 + 车辆审核 + 收集资料 + 提交订单 | im | load_skill, todo_write, upload_driving_license, submit_order, transfer_human |\n\n**切换机制**:PhoneAgent 完成初筛并确认好友已添加后,调用 `handoff_to_im` 工具。Orchestrator 会:\n1. 提取 PhoneAgent 收集的客户信息(姓名、车况、初筛结果)\n2. 将信息打包成 handoff summary\n3. 切换到 IMAgent,用 handoff summary 初始化 IMAgent 的 history\n\n**与单 Agent 版的区别**:单 Agent 版共享同一 history,通过 STAGE 切换 system prompt。多 Agent 版每个 Agent 有独立 history,通过 handoff 显式传递上下文。\n\n---\n\n## 阶段 1:电话外呼 — PhoneAgent 负责身份确认与意向初筛\n\n**开场白流程(按顺序,每句等客户回应再继续):**\n1. 先确认身份:\"喂,您好,请问是 {客户姓名} 吗?\" — 客户姓名从外呼系统已知,直接用\n2. 客户确认后,自报家门:\"我是 X 公司的,这边做车抵贷\"\n3. 简短寒暄一句拉近距离,如\"您现在说话方便吗?\"或\"没打扰到您吧?\"\n4. 客户表示方便 → 询问意向:\"想了解下您最近有没有资金周转的需求?\"\n5. 客户明确拒绝 → 礼貌结束:\"好的,那不打扰您了,再见\",记录原因,不得二次强推\n6. 客户有兴趣 → 进入初筛\n\n**初筛条件(全部满足才通过):**\n- 客户名下有车\n- 车是全款的,或者按揭的但已还清并拿到绿本(机动车登记证书)\n- 三个条件缺一不可,任何一个不满足 → 礼貌告知\"暂时不符合条件\",结束通话\n\n**初筛通过后的加好友流程:**\n- 告知客户:\"那我加您个微信吧,后续微信上聊\"\n- 调用 `send_friend_request` 发送添加好友请求\n- 提示客户查看\"服务通知\"有没有提示,如有提示,长按二维码识别并添加\n- 调用 `check_friend_added` 检查是否添加成功\n- 客户说没看到提示 → 再次调用 `send_friend_request`(最多3次)\n- 第3次仍未添加 → 友好提示客户稍后会有其他人联系,转人工\n\n**加好友成功后:**\n- 提示客户:\"好的,加上了,后续咱们从微信上聊\"\n- 调用 `handoff_to_im` 工具,将客户信息传递给 IMAgent\n- PhoneAgent 工作结束\n\n## 阶段 2:IM 沟通 — IMAgent 负责资料收集与订单提交\n\nIMAgent 接收到 handoff summary 后,继续与客户在微信上沟通。\n\n**流程:**\n1. 收集行驶证:\"您好,麻烦把行驶证正面拍个照发过来吧\"\n2. 客户发送后 → 调用 `upload_driving_license` 上传审核\n3. 审核失败 → 告知客户\"这辆车暂时办不了\"。客户追问原因 → 告知接口返回的失败原因\n4. 审核通过 → 继续收集:姓名、身份证号、家庭住址\n5. 收集完成后 → 调用 `submit_order` 提交订单(order_data 需包含 name/id_card/address)\n6. 提交成功 → 告知客户订单已提交,后续会有专人联系\n\n---\n\n## 对话风格 — 按 Agent 加载\n\nPhoneAgent 和 IMAgent 有独立的 system prompt,各自内置对应的对话风格(不需要运行时切换):\n- PhoneAgent → 电话风格(短句口语/语气词/一轮一问/不用emoji)\n- IMAgent → IM 风格(可稍长/可用emoji/可加粗/异步等待)\n\n---\n\n## 合规红线\n- 客户明确拒绝不得强推\n- 初筛不通过不得告知内部规则,只说\"暂时不符合条件\"\n- 身份证号只确认后4位,不全量复读\n- 转人工条件:客户投诉、要求人工、加好友3次未成功\n"}
+
+event: thinking_start
+data: {"agent": "im"}
+
+event: thinking_delta
+data: {"text": "Good"}
+
+event: thinking_delta
+data: {"text": ", I"}
+
+event: thinking_delta
+data: {"text": "'ve"}
+
+event: thinking_delta
+data: {"text": " loaded the"}
+
+event: thinking_delta
+data: {"text": " loan-sales"}
+
+event: thinking_delta
+data: {"text": " skill."}
+
+event: thinking_delta
+data: {"text": " Now"}
+
+event: thinking_delta
+data: {"text": " I understand"}
+
+event: thinking_delta
+data: {"text": " the full"}
+
+event: thinking_delta
+data: {"text": " process."}
+
+event: thinking_delta
+data: {"text": " As"}
+
+event: thinking_delta
+data: {"text": " IMA"}
+
+event: thinking_delta
+data: {"text": "gent,"}
+
+event: thinking_delta
+data: {"text": " I"}
+
+event: thinking_delta
+data: {"text": " need to"}
+
+event: thinking_delta
+data: {"text": ":\n\n1"}
+
+event: thinking_delta
+data: {"text": ". First"}
+
+event: thinking_delta
+data: {"text": ", set"}
+
+event: thinking_delta
+data: {"text": " up my"}
+
+event: thinking_delta
+data: {"text": " todo list"}
+
+event: thinking_delta
+data: {"text": " for"}
+
+event: thinking_delta
+data: {"text": " the IM"}
+
+event: thinking_delta
+data: {"text": " phase\n"}
+
+event: thinking_delta
+data: {"text": "2"}
+
+event: thinking_delta
+data: {"text": ". Start"}
+
+event: thinking_delta
+data: {"text": " the conversation"}
+
+event: thinking_delta
+data: {"text": " with Mr"}
+
+event: thinking_delta
+data: {"text": ". Zhang"}
+
+event: thinking_delta
+data: {"text": ", asking"}
+
+event: thinking_delta
+data: {"text": " for the"}
+
+event: thinking_delta
+data: {"text": " driving"}
+
+event: thinking_delta
+data: {"text": " license photo"}
+
+event: thinking_delta
+data: {"text": "\n\nThe"}
+
+event: thinking_delta
+data: {"text": " hand"}
+
+event: thinking_delta
+data: {"text": "off summary"}
+
+event: thinking_delta
+data: {"text": " from Phone"}
+
+event: thinking_delta
+data: {"text": "Agent"}
+
+event: thinking_delta
+data: {"text": " should contain"}
+
+event: thinking_delta
+data: {"text": ": customer"}
+
+event: thinking_delta
+data: {"text": " name ("}
+
+event: thinking_delta
+data: {"text": "张"}
+
+event: thinking_delta
+data: {"text": "先生),"}
+
+event: thinking_delta
+data: {"text": " car ownership"}
+
+event: thinking_delta
+data: {"text": " info"}
+
+event: thinking_delta
+data: {"text": ", initial"}
+
+event: thinking_delta
+data: {"text": " screening result"}
+
+event: thinking_delta
+data: {"text": " (passed"}
+
+event: thinking_delta
+data: {"text": " - has"}
+
+event: thinking_delta
+data: {"text": " a car"}
+
+event: thinking_delta
+data: {"text": ", fully"}
+
+event: thinking_delta
+data: {"text": " paid or"}
+
+event: thinking_delta
+data: {"text": " mortgage cleared"}
+
+event: thinking_delta
+data: {"text": " with green"}
+
+event: thinking_delta
+data: {"text": " book).\n\n"}
+
+event: thinking_delta
+data: {"text": "Let me"}
+
+event: thinking_delta
+data: {"text": " start"}
+
+event: thinking_delta
+data: {"text": " by setting"}
+
+event: thinking_delta
+data: {"text": " up the"}
+
+event: thinking_delta
+data: {"text": " todo list"}
+
+event: thinking_delta
+data: {"text": " and then"}
+
+event: thinking_delta
+data: {"text": " sending the"}
+
+event: thinking_delta
+data: {"text": " first message"}
+
+event: thinking_delta
+data: {"text": " to collect"}
+
+event: thinking_delta
+data: {"text": " the driving"}
+
+event: thinking_delta
+data: {"text": " license photo"}
+
+event: thinking_delta
+data: {"text": "."}
+
+event: thinking_end
+data: {}
+
+event: tool_call
+data: {"name": "todo_write", "input": {"todos": [{"content": "收集行驶证照片并上传审核", "status": "in_progress"}, {"content": "审核通过后收集姓名、身份证号、家庭住址", "status": "pending"}, {"content": "提交订单", "status": "pending"}, {"content": "告知客户后续会有专人联系", "status": "pending"}]}}
+
+event: todos_updated
+data: {"type": "todos_updated", "todos": [{"content": "收集行驶证照片并上传审核", "status": "in_progress"}, {"content": "审核通过后收集姓名、身份证号、家庭住址", "status": "pending"}, {"content": "提交订单", "status": "pending"}, {"content": "告知客户后续会有专人联系", "status": "pending"}]}
+
+event: tool_result
+data: {"name": "todo_write", "output": "已更新 4 个阶段状态"}
+
+event: thinking_start
+data: {"agent": "im"}
+
+event: thinking_delta
+data: {"text": "Now"}
+
+event: thinking_delta
+data: {"text": " I'll"}
+
+event: thinking_delta
+data: {"text": " start the"}
+
+event: thinking_delta
+data: {"text": " conversation with"}
+
+event: thinking_delta
+data: {"text": " Mr."}
+
+event: thinking_delta
+data: {"text": " Zhang"}
+
+event: thinking_delta
+data: {"text": ". I"}
+
+event: thinking_delta
+data: {"text": " know from"}
+
+event: thinking_delta
+data: {"text": " the"}
+
+event: thinking_delta
+data: {"text": " PhoneAgent"}
+
+event: thinking_delta
+data: {"text": " handoff"}
+
+event: thinking_delta
+data: {"text": " that"}
+
+event: thinking_delta
+data: {"text": ":\n-"}
+
+event: thinking_delta
+data: {"text": " Customer name"}
+
+event: thinking_delta
+data: {"text": ": 张"}
+
+event: thinking_delta
+data: {"text": "先生\n"}
+
+event: thinking_delta
+data: {"text": "- He"}
+
+event: thinking_delta
+data: {"text": " has a"}
+
+event: thinking_delta
+data: {"text": " car,"}
+
+event: thinking_delta
+data: {"text": " and the"}
+
+event: thinking_delta
+data: {"text": " initial screening"}
+
+event: thinking_delta
+data: {"text": " passed"}
+
+event: thinking_delta
+data: {"text": " (car"}
+
+event: thinking_delta
+data: {"text": " is fully"}
+
+event: thinking_delta
+data: {"text": " paid or"}
+
+event: thinking_delta
+data: {"text": " mortgage cleared"}
+
+event: thinking_delta
+data: {"text": ")\n-"}
+
+event: thinking_delta
+data: {"text": " He"}
+
+event: thinking_delta
+data: {"text": " agreed to"}
+
+event: thinking_delta
+data: {"text": " add We"}
+
+event: thinking_delta
+data: {"text": "Chat friend"}
+
+event: thinking_delta
+data: {"text": "\n\nI"}
+
+event: thinking_delta
+data: {"text": " should greet"}
+
+event: thinking_delta
+data: {"text": " him briefly"}
+
+event: thinking_delta
+data: {"text": " and ask"}
+
+event: thinking_delta
+data: {"text": " for the"}
+
+event: thinking_delta
+data: {"text": " driving license"}
+
+event: thinking_delta
+data: {"text": " photo."}
+
+event: thinking_delta
+data: {"text": " Per the"}
+
+event: thinking_delta
+data: {"text": " style"}
+
+event: thinking_delta
+data: {"text": " guidelines,"}
+
+event: thinking_delta
+data: {"text": " I should"}
+
+event: thinking_delta
+data: {"text": " not re"}
+
+event: thinking_delta
+data: {"text": "-ask"}
+
+event: thinking_delta
+data: {"text": " questions that"}
+
+event: thinking_delta
+data: {"text": " were already"}
+
+event: thinking_delta
+data: {"text": " covered in"}
+
+event: thinking_delta
+data: {"text": " the phone"}
+
+event: thinking_delta
+data: {"text": " phase."}
+
+event: thinking_end
+data: {}
+
+event: text_start
+data: {"agent": "im"}
+
+event: text_delta
+data: {"text": "您好"}
+
+event: text_delta
+data: {"text": "，张"}
+
+event: text_delta
+data: {"text": "先生"}
+
+event: text_delta
+data: {"text": " 👋"}
+
+event: text_delta
+data: {"text": " 前"}
+
+event: text_delta
+data: {"text": "面咱们"}
+
+event: text_delta
+data: {"text": "电话上"}
+
+event: text_delta
+data: {"text": "聊过了"}
+
+event: text_delta
+data: {"text": "，车"}
+
+event: text_delta
+data: {"text": "的情况已经"}
+
+event: text_delta
+data: {"text": "确认没问题"}
+
+event: text_delta
+data: {"text": "。\n\n接下来"}
+
+event: text_delta
+data: {"text": "麻烦您"}
+
+event: text_delta
+data: {"text": "把"}
+
+event: text_delta
+data: {"text": "**行驶"}
+
+event: text_delta
+data: {"text": "证正面"}
+
+event: text_delta
+data: {"text": "**拍"}
+
+event: text_delta
+data: {"text": "个清晰"}
+
+event: text_delta
+data: {"text": "的照片发"}
+
+event: text_delta
+data: {"text": "过来"}
+
+event: text_delta
+data: {"text": "，我"}
+
+event: text_delta
+data: {"text": "这边做"}
+
+event: text_delta
+data: {"text": "一下车辆"}
+
+event: text_delta
+data: {"text": "审核"}
+
+event: text_delta
+data: {"text": " 😊"}
+
+event: text_end
+data: {}
+
+event: done
+data: {"active_agent": "im"}
+

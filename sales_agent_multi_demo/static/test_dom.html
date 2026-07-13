@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><title>DOM Test</title></head>
+<body>
+<div id="messages" style="display:flex;flex-direction:column;height:600px;overflow-y:auto;border:1px solid #ccc;padding:10px"></div>
+<button onclick="runTest()">运行测试</button>
+<pre id="log" style="background:#f0f0f0;padding:10px;margin-top:10px"></pre>
+<script>
+// 模拟 streamSSE 的核心逻辑
+let currentAgent = 'im';
+let messageEl = null, messageTextBuf = '';
+let toolBlockEl = null, toolBlockBodyEl = null;
+let thinkingEl = null, thinkingBodyEl = null, thinkingTextBuf = '';
+
+function log(msg) {
+  document.getElementById('log').textContent += msg + '\n';
+}
+
+function createStreamingMessage(agent) {
+  const div = document.createElement('div');
+  div.className = agent === 'im' ? 'msg agent im' : 'msg agent';
+  div.style.cssText = 'align-self:flex-start;background:#fff;border:1px solid #ddd;border-left:3px solid #a78bfa;padding:12px 16px;max-width:75%;white-space:pre-wrap';
+  const label = agent === 'im' ? '[IMAgent]' : '[PhoneAgent]';
+  div.innerHTML = `<div class="role-tag" style="color:#a78bfa;font-size:11px">${label}</div><span class="msg-text"></span>`;
+  return div;
+}
+
+function handleEvent(eventType, data) {
+  switch (eventType) {
+    case 'agent_start':
+      log(`[agent_start] agent=${data.agent}`);
+      break;
+    case 'thinking_start':
+      log(`[thinking_start] agent=${data.agent}`);
+      break;
+    case 'thinking_delta':
+      break;
+    case 'thinking_end':
+      log(`[thinking_end]`);
+      break;
+    case 'text_start':
+      log(`[text_start] agent=${data.agent}, currentAgent=${currentAgent}`);
+      messageEl = createStreamingMessage(data.agent || currentAgent);
+      messageTextBuf = '';
+      document.getElementById('messages').appendChild(messageEl);
+      log(`  → messageEl 已创建, in DOM: ${document.getElementById('messages').contains(messageEl)}`);
+      break;
+    case 'text_delta':
+      if (messageEl) {
+        messageTextBuf += data.text || '';
+        const textNode = messageEl.querySelector('.msg-text');
+        if (textNode) {
+          textNode.textContent = messageTextBuf;
+        }
+      }
+      break;
+    case 'text_end':
+      log(`[text_end] buf长度=${messageTextBuf.length}, trim后=${messageTextBuf.trim().length}`);
+      if (messageEl) {
+        if (!messageTextBuf.trim()) {
+          messageEl.remove();
+          log('  → 文本为空,已移除!');
+        } else {
+          log(`  → 文本保留: "${messageTextBuf.substring(0,30)}..."`);
+        }
+        messageEl = null;
+        messageTextBuf = '';
+      }
+      break;
+    case 'tool_call':
+      log(`[tool_call] name=${data.name}`);
+      break;
+    case 'tool_result':
+      log(`[tool_result] name=${data.name}`);
+      break;
+    case 'done':
+      log(`[done] active_agent=${data.active_agent}`);
+      break;
+  }
+}
+
+async function runTest() {
+  document.getElementById('log').textContent = '';
+  log('开始测试...');
+  
+  // 读取 SSE 文件(通过 fetch)
+  const resp = await fetch('/im_sse_raw.txt');
+  const text = await resp.text();
+  
+  let buffer = '';
+  let totalEvents = 0;
+  for (const chunk of text.split('\n\n')) {
+    if (!chunk.trim()) continue;
+    let eventType = 'message';
+    let dataLines = [];
+    for (const line of chunk.split('\n')) {
+      if (line.startsWith('event:')) eventType = line.slice(6).trim();
+      else if (line.startsWith('data:')) dataLines.push(line.slice(5).trim());
+    }
+    if (dataLines.length > 0) {
+      handleEvent(eventType, JSON.parse(dataLines.join('\n')));
+      totalEvents++;
+    }
+  }
+  log(`\n总计处理 ${totalEvents} 个事件`);
+  log(`messages 容器子元素数: ${document.getElementById('messages').children.length}`);
+  
+  // 检查是否有文本气泡
+  const msgs = document.getElementById('messages').querySelectorAll('.msg-text');
+  log(`.msg-text 元素数: ${msgs.length}`);
+  msgs.forEach((m,i) => log(`  [${i}] "${m.textContent.substring(0,40)}..."`));
+}
+</script>
+</body>
+</html>

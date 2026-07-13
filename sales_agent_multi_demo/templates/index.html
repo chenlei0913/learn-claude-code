@@ -1099,6 +1099,27 @@ async function startSession() {
   }
 }
 
+// ── 测试 IM handoff(调试用,直接调 /api/test_im) ──
+async function testImHandoff() {
+  // 隐藏 start screen,显示 chat
+  document.getElementById('startScreen').style.display = 'none';
+  document.getElementById('chatScreen').style.display = 'flex';
+  // 清空 messages
+  document.getElementById('messages').innerHTML = '';
+
+  isWaiting = true;
+  setInputEnabled(false);
+  try {
+    const resp = await fetch('/api/test_im');
+    await processSSEResponse(resp);
+  } catch (err) {
+    addMessage('error', '网络错误: ' + err.message);
+  } finally {
+    isWaiting = false;
+    setInputEnabled(true);
+  }
+}
+
 // ── Send message ──
 async function sendMessage() {
   const input = document.getElementById('input');
@@ -1136,7 +1157,11 @@ async function streamSSE(url, body) {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
   });
+  await processSSEResponse(resp);
+}
 
+// 处理 SSE response(从 streamSSE 和 testImHandoff 共用)
+async function processSSEResponse(resp) {
   if (!resp.ok) {
     let msg = `HTTP ${resp.status}`;
     try { msg += ': ' + (await resp.json()).error; } catch (_) {}
@@ -1182,6 +1207,7 @@ async function streamSSE(url, body) {
 
       case 'agent_start': {
         const agent = data.agent || 'phone';
+        console.log('[SSE] agent_start', agent, 'lastAgent=', lastAgent, 'hadAnyOutput=', hadAnyOutput);
         if (lastAgent && lastAgent !== agent && hadAnyOutput) {
           addAgentSwitchDivider(lastAgent, agent);
         }
@@ -1236,9 +1262,11 @@ async function streamSSE(url, body) {
         if (typingShown) { hideTyping(); typingShown = false; }
         hadAnyOutput = true;
         const agent = data.agent || currentAgent;
+        console.log('[SSE] text_start', 'agent=', agent, 'currentAgent=', currentAgent);
         messageEl = createStreamingMessage(agent);
         messageTextBuf = '';
         document.getElementById('messages').appendChild(messageEl);
+        console.log('[SSE] text_start messageEl created, inDOM=', document.getElementById('messages').contains(messageEl));
         scrollBottom();
         break;
       }
@@ -1251,14 +1279,18 @@ async function streamSSE(url, body) {
             textNode.textContent = messageTextBuf;
             scrollBottom();
           }
+        } else if (data.text) {
+          console.warn('[SSE] text_delta but messageEl is null! text=', data.text.substring(0,30));
         }
         break;
       }
 
       case 'text_end': {
+        console.log('[SSE] text_end bufLen=', messageTextBuf.length, 'trimEmpty=', !messageTextBuf.trim(), 'hasEl=', !!messageEl);
         if (messageEl) {
           if (!messageTextBuf.trim()) {
             messageEl.remove();
+            console.log('[SSE] text_end 空文本,已移除 messageEl!');
           }
           messageEl = null;
           messageTextBuf = '';
@@ -1489,6 +1521,7 @@ async function resetSession() {
         <input type="text" id="customerPhone" placeholder="如:13800000001" autocomplete="off">
         <div class="form-error" id="formError"></div>
         <button type="button" onclick="startSession()" id="startBtn">开始外呼</button>
+        <button type="button" onclick="testImHandoff()" id="testImBtn" style="margin-top:8px;background:transparent;border:1px dashed var(--border);color:var(--text-dim);font-size:12px">测试 IM handoff(调试用)</button>
       </form>
       <div class="arch-hint">
         <span class="phone-c">PhoneAgent</span> 电话阶段 → handoff_to_im →
