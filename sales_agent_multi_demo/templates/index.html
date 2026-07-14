@@ -1049,13 +1049,35 @@ let latestTodos = [];         // 缓存最新的 todos,供过滤后重新渲染
 let userAtBottom = true;      // 用户是否在底部(控制自动滚动)
 let isAutoScrolling = false;  // 正在程序自动滚动(忽略 scroll 事件)
 let lastScrollTop = 0;        // 上次 scrollTop,用于判断滚动方向
+let eventsConnected = false;  // /api/events 长连接是否已建立
+
+// 连接 /api/events 长连接,接收后端超时触发的 agent 输出(s14 consume)
+// 后端 Timer 超时后自动跑 agent_loop,输出推到 events_queue,此连接读取并渲染
+async function connectEvents() {
+  if (eventsConnected || !sessionId) return;
+  eventsConnected = true;
+  console.log('[events] 建立 SSE 长连接, session:', sessionId);
+  try {
+    const resp = await fetch(`/api/events?session_id=${sessionId}`);
+    // 复用 processSSEResponse 解析事件(超时轮的 agent_loop 产生完整的 agent_start→...→done 流)
+    await processSSEResponse(resp);
+  } catch (err) {
+    console.error('[events] 连接断开:', err);
+  } finally {
+    eventsConnected = false;
+  }
+}
 
 // 监听用户手动滚动,更新 userAtBottom 标志
 document.addEventListener('DOMContentLoaded', () => {
   const c = document.getElementById('messages');
   if (c) {
     c.addEventListener('scroll', () => {
-      if (isAutoScrolling) return;
+      if (isAutoScrolling) {
+        // 程序滚动时同步 lastScrollTop，避免后续用户滚动的方向判断失真
+        lastScrollTop = c.scrollTop;
+        return;
+      }
       const distFromBottom = c.scrollHeight - c.scrollTop - c.clientHeight;
       const delta = c.scrollTop - lastScrollTop;
       // 用户往下滚且接近底部(200px内) → 重新启用自动滚动
@@ -1170,7 +1192,6 @@ async function sendMessage() {
 
   addMessage('user', text);
   input.value = '';
-  autoResize(input);
 
   isWaiting = true;
   setInputEnabled(false);
@@ -1245,6 +1266,8 @@ async function processSSEResponse(resp) {
     switch (eventType) {
       case 'session':
         sessionId = data.session_id || sessionId;
+        // 首次收到 session_id 时,建立 /api/events 长连接接收超时推送
+        connectEvents();
         break;
 
       case 'agent_start': {
@@ -1306,6 +1329,7 @@ async function processSSEResponse(resp) {
             if (heightDiff > 0) {
               isAutoScrolling = true;
               c.scrollTop -= heightDiff;
+              lastScrollTop = c.scrollTop;
               requestAnimationFrame(() => { isAutoScrolling = false; });
             }
           }
@@ -1673,6 +1697,7 @@ function scrollBottom() {
   const c = document.getElementById('messages');
   isAutoScrolling = true;
   c.scrollTop = c.scrollHeight;
+  lastScrollTop = c.scrollTop;  // 直接同步，避免 scroll 事件异步触发导致 lastScrollTop 过期
   requestAnimationFrame(() => { isAutoScrolling = false; });
 }
 

@@ -8,7 +8,7 @@ Run: python sales_agent_multi_demo/web_app.py
 Needs: 根目录 .env 已配置 ANTHROPIC_API_KEY 和 MODEL_ID
 """
 
-import json, os, sys, uuid, importlib.util, threading, random, time
+import json, os, sys, uuid, importlib.util, threading, random, time, queue
 from pathlib import Path
 
 # 先用 importlib 加载 code.py,再清理 sys.path 避免与标准库 code 模块冲突
@@ -100,6 +100,11 @@ def get_or_create_session(session_id: str | None = None):
         "customer_name": "",
         "customer_phone": "",
         "handoff_summary": "",       # PhoneAgent 传给 IMAgent 的信息
+        "reply_timeout_seconds": 10, # 电话阶段回复超时秒数(后端调度线程用)
+        "phone_timeout_count": 0,    # 电话阶段连续超时次数
+        "timeout_timer": None,       # threading.Timer 对象
+        "agent_lock": threading.Lock(),  # agent_loop 互斥锁(防超时轮和用户轮并发)
+        "events_queue": None,        # queue.Queue,超时轮 agent 输出推到这里,供 /api/events 长连接读取
     }
     return session_id, SESSIONS[session_id]
 
@@ -115,6 +120,69 @@ def _start_friend_check_thread(session: dict):
         session["friend_status"] = "added"
     t = threading.Thread(target=_check, daemon=True)
     t.start()
+
+
+# ═══════════════════════════════════════════════════════════
+#  回复超时调度 (s14 思路) — 独立 Timer 线程 + 自动触发 agent_loop
+#  调度(scheduler): start_reply_timeout 在 agent 回复后启动倒计时
+#  交付(deliver): Timer 触发后后台线程跑 agent_loop,输出推到 events_queue
+#  消费(consume): /api/events SSE 长连接从 events_queue 读取推给前端
+# ═══════════════════════════════════════════════════════════
+
+REPLY_TIMEOUT_SECONDS = 10  # 默认超时秒数
+MAX_TIMEOUT_COUNT = 3       # 最多超时次数,超过后结束通话
+
+def cancel_reply_timeout(session: dict):
+    """取消回复超时定时器(客户回复或 handoff 时调用)"""
+    timer = session.get("timeout_timer")
+    if timer:
+        timer.cancel()
+        session["timeout_timer"] = None
+
+def start_reply_timeout(session: dict):
+    """agent 回复后启动回复超时定时器(s14 scheduler)"""
+    cancel_reply_timeout(session)
+    if session["active_agent"] != "phone":
+        return
+    if session["phone_timeout_count"] >= MAX_TIMEOUT_COUNT:
+        return  # 通话已结束
+
+    def on_timeout():
+        """Timer 回调:超时触发,后台线程跑 agent_loop(s14 deliver)"""
+        session["phone_timeout_count"] += 1
+        count = session["phone_timeout_count"]
+        seconds = session.get("reply_timeout_seconds", REPLY_TIMEOUT_SECONDS)
+        if count >= MAX_TIMEOUT_COUNT:
+            timeout_msg = "[系统: 客户已3次未回复,建议结束通话]"
+        else:
+            timeout_msg = f"[系统: 客户{seconds}秒未回复,第{count}次]"
+        print(f"[timeout] 第{count}次超时,注入: {timeout_msg}", flush=True)
+        # 获取 agent_lock,防止和用户请求并发
+        with session["agent_lock"]:
+            session["phone_history"].append({"role": "user", "content": timeout_msg})
+            eq = session.get("events_queue")
+            if eq is None:
+                return  # 没有长连接,丢弃
+            # 跑 agent_loop,输出推到 events_queue
+            try:
+                for sse_text in web_agent_loop_stream(session):
+                    eq.put(sse_text)
+            except Exception as e:
+                import traceback
+                eq.put(_sse("error", {
+                    "error": str(e),
+                    "traceback": traceback.format_exc(),
+                }))
+            # agent_loop 结束,启动下一轮超时定时器
+            start_reply_timeout(session)
+
+    timer = threading.Timer(
+        session.get("reply_timeout_seconds", REPLY_TIMEOUT_SECONDS),
+        on_timeout,
+    )
+    timer.daemon = True
+    session["timeout_timer"] = timer
+    timer.start()
 
 
 # ═══════════════════════════════════════════════════════════
@@ -588,14 +656,17 @@ def start_session():
 
     def generate():
         yield _sse("session", {"session_id": session_id})
-        try:
-            yield from web_agent_loop_stream(session)
-        except Exception as e:
-            import traceback
-            yield _sse("error", {
-                "error": str(e),
-                "traceback": traceback.format_exc(),
-            })
+        with session["agent_lock"]:
+            try:
+                yield from web_agent_loop_stream(session)
+            except Exception as e:
+                import traceback
+                yield _sse("error", {
+                    "error": str(e),
+                    "traceback": traceback.format_exc(),
+                })
+        # 开场白结束后启动回复超时定时器
+        start_reply_timeout(session)
 
     return Response(
         stream_with_context(generate()),
@@ -617,7 +688,10 @@ def chat():
 
     session_id, session = get_or_create_session(session_id)
 
+    # 真实用户回复:取消超时定时器,重置计数
+    cancel_reply_timeout(session)
     if session["started"] and message.strip():
+        session["phone_timeout_count"] = 0
         if session["active_agent"] == "phone":
             session["phone_history"].append({"role": "user", "content": message})
         else:
@@ -627,14 +701,18 @@ def chat():
 
     def generate():
         yield _sse("session", {"session_id": session_id})
-        try:
-            yield from web_agent_loop_stream(session)
-        except Exception as e:
-            import traceback
-            yield _sse("error", {
-                "error": str(e),
-                "traceback": traceback.format_exc(),
-            })
+        # 获取 agent_lock,防止和超时轮并发
+        with session["agent_lock"]:
+            try:
+                yield from web_agent_loop_stream(session)
+            except Exception as e:
+                import traceback
+                yield _sse("error", {
+                    "error": str(e),
+                    "traceback": traceback.format_exc(),
+                })
+        # agent_loop 结束,启动回复超时定时器(s14 scheduler)
+        start_reply_timeout(session)
 
     return Response(
         stream_with_context(generate()),
@@ -652,9 +730,45 @@ def reset():
     data = request.get_json(silent=True) or {}
     session_id = data.get("session_id")
     if session_id and session_id in SESSIONS:
+        old = SESSIONS[session_id]
+        cancel_reply_timeout(old)  # 清理定时器
         del SESSIONS[session_id]
     new_id, _ = get_or_create_session()
     return jsonify({"session_id": new_id, "message": "会话已重置"})
+
+
+@app.route("/api/events")
+def events():
+    """SSE 长连接:推送超时轮 agent 输出给前端(s14 consume)。
+    前端建立长连接后,后端超时触发的 agent_loop 输出通过此连接推送。"""
+    session_id = request.args.get("session_id")
+    if not session_id or session_id not in SESSIONS:
+        return jsonify({"error": "invalid session_id"}), 400
+    session = SESSIONS[session_id]
+    if session["events_queue"] is None:
+        session["events_queue"] = queue.Queue()
+    eq = session["events_queue"]
+
+    def generate():
+        while True:
+            try:
+                sse_text = eq.get(timeout=15)
+                if sse_text == "__close__":
+                    break
+                yield sse_text
+            except queue.Empty:
+                # 心跳,保持连接
+                yield ": heartbeat\n\n"
+
+    return Response(
+        stream_with_context(generate()),
+        mimetype="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+            "Connection": "keep-alive",
+        },
+    )
 
 
 @app.route("/api/test_im")
