@@ -2,7 +2,10 @@
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#1a1b26">
 <title>多 Agent 电销 Demo</title>
 <style>
   :root {
@@ -28,14 +31,20 @@
 
   * { margin: 0; padding: 0; box-sizing: border-box; }
 
+  html, body {
+    height: 100%;
+  }
   body {
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
     background: var(--bg);
     color: var(--text);
     height: 100vh;
+    height: 100dvh;
     display: flex;
     flex-direction: column;
     overflow: hidden;
+    -webkit-tap-highlight-color: transparent;
+    -webkit-text-size-adjust: 100%;
   }
 
   /* ── Header ── */
@@ -69,6 +78,45 @@
     gap: 16px;
     font-size: 12px;
     color: var(--text-dim);
+  }
+  /* Mobile-only: button to open the sidebar drawer */
+  .sidebar-toggle {
+    display: none;
+    background: var(--bg-input);
+    color: var(--accent);
+    border: 1px solid var(--border);
+    padding: 6px 12px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: 600;
+    align-items: center;
+    gap: 6px;
+    position: relative;
+  }
+  .sidebar-toggle .badge-count {
+    background: var(--accent);
+    color: var(--bg);
+    border-radius: 10px;
+    padding: 0 6px;
+    font-size: 11px;
+    min-width: 16px;
+    text-align: center;
+    line-height: 16px;
+  }
+  /* Backdrop for sidebar drawer on mobile */
+  .sidebar-backdrop {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,.5);
+    z-index: 40;
+    opacity: 0;
+    transition: opacity .25s;
+  }
+  .sidebar-backdrop.show {
+    display: block;
+    opacity: 1;
   }
   header .meta .badge {
     background: var(--bg-input);
@@ -159,6 +207,184 @@
     font-size: 13px;
     color: var(--danger);
   }
+
+  /* ── Thinking block (collapsible, above message bubble) ── */
+  .thinking-block {
+    align-self: flex-start;
+    max-width: 75%;
+    margin-bottom: 6px;
+    background: rgba(167,139,250,.06);
+    border: 1px solid rgba(167,139,250,.2);
+    border-radius: var(--radius);
+    /* 注意:不要用 overflow:hidden,会裁掉展开后的 think-body。
+       圆角通过子元素自身的 border-radius 维持 */
+    overflow: visible;
+    animation: fadeIn .3s ease;
+  }
+  .thinking-block.im { border-color: rgba(167,139,250,.35); }
+  .thinking-block summary {
+    cursor: pointer;
+    user-select: none;
+    padding: 8px 14px;
+    font-size: 12px;
+    color: var(--im-agent);
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    list-style: none;
+  }
+  .thinking-block summary::-webkit-details-marker { display: none; }
+  .thinking-block summary::before {
+    content: '▶';
+    font-size: 10px;
+    transition: transform .2s;
+    color: var(--text-dim);
+  }
+  .thinking-block[open] summary::before { transform: rotate(90deg); }
+  .thinking-block summary .think-label {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+  .thinking-block summary .think-spinner {
+    width: 10px; height: 10px;
+    border: 1.5px solid rgba(167,139,250,.3);
+    border-top-color: var(--im-agent);
+    border-radius: 50%;
+    animation: spin .8s linear infinite;
+    display: inline-block;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .thinking-block .think-body {
+    padding: 8px 14px 12px;
+    font-size: 12px;
+    line-height: 1.6;
+    color: var(--text-dim);
+    white-space: pre-wrap;
+    word-break: break-word;
+    font-family: 'SF Mono', 'Fira Code', monospace;
+    border-top: 1px solid rgba(167,139,250,.15);
+    max-height: 320px;
+    overflow-y: auto;
+  }
+  .thinking-block .think-body::-webkit-scrollbar { width: 4px; }
+  .thinking-block .think-body::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+  /* ── Tool call block (collapsible, inline in chat) ── */
+  .tool-block {
+    align-self: flex-start;
+    max-width: 75%;
+    margin-bottom: 6px;
+    background: rgba(78,205,196,.05);
+    border: 1px solid rgba(78,205,196,.2);
+    border-radius: var(--radius);
+    overflow: visible;
+    animation: fadeIn .3s ease;
+  }
+  .tool-block.im-tool {
+    background: rgba(167,139,250,.05);
+    border-color: rgba(167,139,250,.25);
+  }
+  .tool-block summary {
+    cursor: pointer;
+    user-select: none;
+    padding: 8px 14px;
+    font-size: 12px;
+    color: var(--accent);
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    list-style: none;
+  }
+  .tool-block.im-tool summary { color: var(--im-agent); }
+  .tool-block summary::-webkit-details-marker { display: none; }
+  .tool-block summary::before {
+    content: '▶';
+    font-size: 10px;
+    transition: transform .2s;
+    color: var(--text-dim);
+  }
+  .tool-block[open] summary::before { transform: rotate(90deg); }
+  .tool-block summary .tool-label {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    font-family: 'SF Mono', 'Fira Code', monospace;
+  }
+  .tool-block summary .tool-spinner {
+    width: 10px; height: 10px;
+    border: 1.5px solid rgba(78,205,196,.3);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin .8s linear infinite;
+    display: inline-block;
+  }
+  .tool-block.im-tool summary .tool-spinner {
+    border-color: rgba(167,139,250,.3);
+    border-top-color: var(--im-agent);
+  }
+  .tool-block summary .tool-status-tag {
+    margin-left: auto;
+    font-size: 10px;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-weight: 500;
+    font-family: -apple-system, sans-serif;
+  }
+  .tool-block summary .tool-status-tag.running {
+    background: rgba(78,205,196,.2);
+    color: var(--accent);
+  }
+  .tool-block.im-tool summary .tool-status-tag.running {
+    background: rgba(167,139,250,.2);
+    color: var(--im-agent);
+  }
+  .tool-block summary .tool-status-tag.ok {
+    background: rgba(46,204,113,.2);
+    color: var(--success);
+  }
+  .tool-block summary .tool-status-tag.blocked {
+    background: rgba(231,76,60,.2);
+    color: var(--danger);
+  }
+  .tool-block .tool-body {
+    padding: 8px 14px 12px;
+    font-size: 12px;
+    line-height: 1.6;
+    color: var(--text-dim);
+    border-top: 1px solid rgba(78,205,196,.15);
+    max-height: 280px;
+    overflow-y: auto;
+  }
+  .tool-block.im-tool .tool-body { border-top-color: rgba(167,139,250,.15); }
+  .tool-block .tool-body::-webkit-scrollbar { width: 4px; }
+  .tool-block .tool-body::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+  .tool-block .tool-body .field-label {
+    color: var(--text);
+    font-weight: 600;
+    margin-top: 6px;
+    margin-bottom: 2px;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: .5px;
+  }
+  .tool-block .tool-body .field-label:first-child { margin-top: 0; }
+  .tool-block .tool-body pre {
+    font-family: 'SF Mono', 'Fira Code', monospace;
+    font-size: 11px;
+    white-space: pre-wrap;
+    word-break: break-all;
+    color: var(--text-dim);
+    margin: 0;
+  }
+  .tool-block .tool-body .detail-line {
+    color: var(--accent-dim);
+    font-size: 11px;
+    margin-top: 4px;
+  }
+  .tool-block.im-tool .tool-body .detail-line { color: var(--im-agent-dim); }
 
   /* Agent switch divider in chat */
   .agent-switch-divider {
@@ -542,6 +768,161 @@
   }
   .arch-hint .phone-c { color: var(--phone-agent); }
   .arch-hint .im-c { color: var(--im-agent); }
+
+  /* ───────────────────────────────────────────────────────────
+     Mobile responsive — ≤ 768px
+     - Stack layout: chat full screen, sidebar slides in as drawer
+     - Larger tap targets, full-width welcome form
+     - Use dynamic viewport height (dvh) for iOS Safari
+     ─────────────────────────────────────────────────────────── */
+  @media (max-width: 768px) {
+    header {
+      padding: 10px 14px;
+      gap: 8px;
+    }
+    header .title {
+      font-size: 14px;
+      flex: 1;
+      min-width: 0;
+    }
+    header .meta {
+      gap: 8px;
+      font-size: 11px;
+    }
+    header .meta .badge {
+      display: none;  /* hide model badge on mobile to save space */
+    }
+    /* Show the sidebar toggle button on mobile */
+    .sidebar-toggle {
+      display: inline-flex;
+    }
+
+    /* Chat area takes full screen */
+    .chat-messages {
+      padding: 14px 12px;
+      gap: 12px;
+    }
+    .msg {
+      max-width: 88%;
+      font-size: 15px;     /* prevent iOS auto-zoom: >=16px is ideal, 15 ok */
+      padding: 10px 14px;
+    }
+    .welcome {
+      padding: 24px 16px;
+      gap: 12px;
+    }
+    .welcome h2 { font-size: 19px; }
+    .welcome p { font-size: 13px; }
+    .welcome-form {
+      width: 100%;
+      max-width: 360px;
+      padding: 18px;
+    }
+    .welcome-form input {
+      font-size: 16px;   /* prevent iOS focus auto-zoom */
+      padding: 12px 14px;
+    }
+    .welcome button {
+      padding: 14px 32px;
+      font-size: 16px;
+    }
+
+    /* Input area — bigger tap targets, safe-area aware */
+    .chat-input {
+      padding: 10px 12px;
+      padding-bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+      gap: 8px;
+    }
+    .chat-input textarea {
+      font-size: 16px;   /* prevent iOS auto-zoom */
+      padding: 12px 14px;
+      min-height: 44px;
+    }
+    .chat-input button {
+      padding: 0 20px;
+      font-size: 15px;
+      min-height: 44px;
+    }
+
+    /* Sidebar becomes a right-side drawer */
+    .sidebar {
+      position: fixed;
+      top: 0;
+      right: 0;
+      bottom: 0;
+      width: 86vw;
+      max-width: 360px;
+      transform: translateX(100%);
+      transition: transform .28s cubic-bezier(.4, 0, .2, 1);
+      z-index: 50;
+      box-shadow: -8px 0 24px rgba(0,0,0,.4);
+      padding-top: env(safe-area-inset-top, 0px);
+    }
+    .sidebar.open {
+      transform: translateX(0);
+    }
+    /* Sidebar close button (mobile only) */
+    .sidebar-close {
+      display: flex;
+      position: absolute;
+      top: 10px;
+      right: 12px;
+      width: 32px;
+      height: 32px;
+      align-items: center;
+      justify-content: center;
+      background: var(--bg-input);
+      border: 1px solid var(--border);
+      border-radius: 50%;
+      color: var(--text);
+      cursor: pointer;
+      font-size: 18px;
+      z-index: 1;
+    }
+    /* Sidebar sections can be taller on mobile since they scroll */
+    .sidebar-section .body {
+      max-height: 220px;
+    }
+
+    /* Agent switch divider — full width friendly */
+    .agent-switch-divider {
+      max-width: 90%;
+      text-align: center;
+    }
+    .thinking-block {
+      max-width: 88%;
+    }
+    .thinking-block .think-body {
+      max-height: 240px;
+      font-size: 11px;
+    }
+    .tool-block {
+      max-width: 88%;
+    }
+    .tool-block .tool-body {
+      max-height: 220px;
+      font-size: 11px;
+    }
+  }
+
+  /* Sidebar close button — hidden on desktop */
+  .sidebar-close {
+    display: none;
+  }
+
+  /* Very small phones (≤ 380px) — slightly tighter */
+  @media (max-width: 380px) {
+    .chat-messages { padding: 10px 8px; }
+    .msg { max-width: 92%; font-size: 14px; }
+    .welcome-form { padding: 14px; }
+    header .title { font-size: 13px; }
+  }
+
+  /* Landscape on phones — squishier */
+  @media (max-width: 900px) and (orientation: landscape) and (max-height: 500px) {
+    .chat-input { padding-bottom: 8px; }
+    .chat-input textarea { min-height: 36px; }
+  }
 </style>
 </head>
 <body>
@@ -553,9 +934,15 @@
   </div>
   <div class="meta">
     <span class="badge">模型: {{ model }}</span>
-    <button onclick="resetSession()">重置会话</button>
+    <button class="sidebar-toggle" onclick="toggleSidebar(true)" aria-label="打开面板">
+      面板
+      <span class="badge-count" id="sidebarBadge">0</span>
+    </button>
+    <button onclick="resetSession()">重置</button>
   </div>
 </header>
+
+<div class="sidebar-backdrop" id="sidebarBackdrop" onclick="toggleSidebar(false)"></div>
 
 <div class="main">
   <!-- Chat -->
@@ -589,7 +976,8 @@
   </div>
 
   <!-- Sidebar -->
-  <div class="sidebar">
+  <div class="sidebar" id="sidebar">
+    <button class="sidebar-close" onclick="toggleSidebar(false)" aria-label="关闭面板">×</button>
     <!-- 当前 Agent -->
     <div class="sidebar-section">
       <h3>当前 Agent</h3>
@@ -638,6 +1026,46 @@ let sessionId = null;
 let isWaiting = false;
 let toolCallCounter = 0;
 let currentAgent = 'phone';   // 追踪当前活跃 agent(用于 typing indicator 颜色)
+let sidebarBadgeCount = 0;    // 移动端:sidebar 关闭时累计的未看事件数
+
+// ── Mobile sidebar drawer toggle ──
+function toggleSidebar(open) {
+  const sidebar = document.getElementById('sidebar');
+  const backdrop = document.getElementById('sidebarBackdrop');
+  if (open) {
+    sidebar.classList.add('open');
+    backdrop.classList.add('show');
+    sidebarBadgeCount = 0;
+    updateSidebarBadge();
+  } else {
+    sidebar.classList.remove('open');
+    backdrop.classList.remove('show');
+  }
+}
+
+function updateSidebarBadge() {
+  const el = document.getElementById('sidebarBadge');
+  if (!el) return;
+  el.textContent = sidebarBadgeCount > 0 ? String(sidebarBadgeCount) : '0';
+  el.style.display = sidebarBadgeCount > 0 ? '' : 'none';
+}
+
+function bumpSidebarBadge(n = 1) {
+  // Only bump when sidebar is closed (mobile) — gives user a hint there's new activity
+  const sidebar = document.getElementById('sidebar');
+  if (sidebar && !sidebar.classList.contains('open')) {
+    sidebarBadgeCount += n;
+    updateSidebarBadge();
+  }
+}
+
+// Close sidebar on Escape (mobile convenience)
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') toggleSidebar(false);
+});
+
+// Reset badge on init
+updateSidebarBadge();
 
 // ── Start ──
 async function startSession() {
@@ -657,40 +1085,38 @@ async function startSession() {
 
   currentAgent = 'phone';
   isWaiting = true;
-  showTyping();
   setInputEnabled(false);
 
   try {
-    const resp = await fetch('/api/start', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ customer_name: name, customer_phone: phone }),
-    });
-    const data = await resp.json();
-    hideTyping();
-
-    if (data.error) {
-      addMessage('error', '错误: ' + data.error);
-      if (data.traceback) console.error(data.traceback);
-      btn.disabled = false;
-      btn.textContent = '开始外呼';
-      isWaiting = false;
-      return;
-    }
-
-    sessionId = data.session_id;
-    renderAgentText(data);
-    processEvents(data.events);
-    updateTodos(data.todos);
-    updateAgentIndicator(data.active_agent);
-    setInputEnabled(true);
+    await streamSSE('/api/start', { customer_name: name, customer_phone: phone });
   } catch (err) {
-    hideTyping();
     addMessage('error', '网络错误: ' + err.message);
-    btn.disabled = false;
-    btn.textContent = '开始外呼';
   } finally {
     isWaiting = false;
+    btn.disabled = false;
+    btn.textContent = '开始外呼';
+    setInputEnabled(true);  // 外呼完成后启用输入框
+  }
+}
+
+// ── 测试 IM handoff(调试用,直接调 /api/test_im) ──
+async function testImHandoff() {
+  // 隐藏 start screen,显示 chat
+  document.getElementById('startScreen').style.display = 'none';
+  document.getElementById('chatScreen').style.display = 'flex';
+  // 清空 messages
+  document.getElementById('messages').innerHTML = '';
+
+  isWaiting = true;
+  setInputEnabled(false);
+  try {
+    const resp = await fetch('/api/test_im');
+    await processSSEResponse(resp);
+  } catch (err) {
+    addMessage('error', '网络错误: ' + err.message);
+  } finally {
+    isWaiting = false;
+    setInputEnabled(true);
   }
 }
 
@@ -704,37 +1130,11 @@ async function sendMessage() {
   input.value = '';
   autoResize(input);
 
-  await callAgent(text);
-}
-
-// ── Call API ──
-async function callAgent(message) {
   isWaiting = true;
-  showTyping();
   setInputEnabled(false);
-
   try {
-    const resp = await fetch('/api/chat', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ session_id: sessionId, message }),
-    });
-    const data = await resp.json();
-
-    hideTyping();
-
-    if (data.error) {
-      addMessage('error', '错误: ' + data.error);
-      if (data.traceback) console.error(data.traceback);
-    } else {
-      sessionId = data.session_id;
-      renderAgentText(data);
-      processEvents(data.events);
-      updateTodos(data.todos);
-      updateAgentIndicator(data.active_agent);
-    }
+    await streamSSE('/api/chat', { session_id: sessionId, message: text });
   } catch (err) {
-    hideTyping();
     addMessage('error', '网络错误: ' + err.message);
   } finally {
     isWaiting = false;
@@ -742,24 +1142,355 @@ async function callAgent(message) {
   }
 }
 
-// ── Render agent text (支持 segments 按 agent 标注) ──
-function renderAgentText(data) {
-  if (data.agent_segments && data.agent_segments.length > 0) {
-    // 按 agent 分段渲染,handoff 时会有 phone + im 两段
-    let lastAgent = null;
-    data.agent_segments.forEach(seg => {
-      // 检测 agent 切换,插入分隔线
-      if (lastAgent && lastAgent !== seg.agent) {
-        addAgentSwitchDivider(lastAgent, seg.agent);
-      }
-      addAgentMessage(seg.agent, seg.text);
-      lastAgent = seg.agent;
-    });
-  } else if (data.agent_text) {
-    // fallback: 用 active_agent 标注
-    const agent = data.active_agent || 'phone';
-    addAgentMessage(agent, data.agent_text);
+// ═══════════════════════════════════════════════════════════
+//  SSE Streaming — fetch + ReadableStream 解析 event-stream
+//  后端事件:
+//    session / agent_start / thinking_start / thinking_delta / thinking_end
+//    text_start / text_delta / text_end
+//    tool_call / tool_detail / tool_result / todos_updated
+//    permission_blocked / order_submitted / transfer_human / agent_changed
+//    error / done
+// ═══════════════════════════════════════════════════════════
+async function streamSSE(url, body) {
+  const resp = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  await processSSEResponse(resp);
+}
+
+// 处理 SSE response(从 streamSSE 和 testImHandoff 共用)
+async function processSSEResponse(resp) {
+  if (!resp.ok) {
+    let msg = `HTTP ${resp.status}`;
+    try { msg += ': ' + (await resp.json()).error; } catch (_) {}
+    addMessage('error', '错误: ' + msg);
+    return;
   }
+
+  const ct = resp.headers.get('content-type') || '';
+  if (!ct.includes('text/event-stream')) {
+    const data = await resp.json();
+    if (data.error) {
+      addMessage('error', '错误: ' + data.error);
+      if (data.traceback) console.error(data.traceback);
+    }
+    return;
+  }
+
+  // 流式状态
+  let thinkingEl = null;
+  let thinkingBodyEl = null;
+  let thinkingTextBuf = '';
+  let messageEl = null;
+  let messageTextBuf = '';
+  let toolBlockEl = null;
+  let toolBlockBodyEl = null;
+  let toolDetailsBuf = [];
+  let lastAgent = null;
+  let hadAnyOutput = false;
+  let typingShown = false;
+
+  const reader = resp.body.getReader();
+  const decoder = new TextDecoder('utf-8');
+  let buffer = '';
+
+  function handleEvent(eventType, dataStr) {
+    let data = {};
+    try { data = JSON.parse(dataStr); } catch (_) { data = {}; }
+
+    switch (eventType) {
+      case 'session':
+        sessionId = data.session_id || sessionId;
+        break;
+
+      case 'agent_start': {
+        const agent = data.agent || 'phone';
+        console.log('[SSE] agent_start', agent, 'lastAgent=', lastAgent, 'hadAnyOutput=', hadAnyOutput);
+        if (lastAgent && lastAgent !== agent && hadAnyOutput) {
+          addAgentSwitchDivider(lastAgent, agent);
+        }
+        lastAgent = agent;
+        currentAgent = agent;
+        updateAgentIndicator(agent);
+        if (!hadAnyOutput && !typingShown) {
+          showTyping();
+          typingShown = true;
+        }
+        break;
+      }
+
+      case 'thinking_start': {
+        if (typingShown) { hideTyping(); typingShown = false; }
+        hadAnyOutput = true;
+        const agent = data.agent || currentAgent;
+        thinkingEl = createThinkingBlock(agent);
+        thinkingBodyEl = thinkingEl.querySelector('.think-body');
+        thinkingTextBuf = '';
+        thinkingEl.open = true;
+        document.getElementById('messages').appendChild(thinkingEl);
+        scrollBottom();
+        break;
+      }
+
+      case 'thinking_delta': {
+        if (thinkingBodyEl) {
+          thinkingTextBuf += data.text || '';
+          thinkingBodyEl.textContent = thinkingTextBuf;
+          scrollBottom();
+        }
+        break;
+      }
+
+      case 'thinking_end': {
+        if (thinkingEl) {
+          thinkingEl.open = false;
+          const spinner = thinkingEl.querySelector('.think-spinner');
+          if (spinner) spinner.remove();
+          const labelEl = thinkingEl.querySelector('.think-label');
+          if (labelEl) {
+            labelEl.innerHTML = `💭 思考过程 (${thinkingTextBuf.length} 字)`;
+          }
+          thinkingEl = null;
+          thinkingBodyEl = null;
+        }
+        break;
+      }
+
+      case 'text_start': {
+        if (typingShown) { hideTyping(); typingShown = false; }
+        hadAnyOutput = true;
+        const agent = data.agent || currentAgent;
+        console.log('[SSE] text_start', 'agent=', agent, 'currentAgent=', currentAgent);
+        messageEl = createStreamingMessage(agent);
+        messageTextBuf = '';
+        document.getElementById('messages').appendChild(messageEl);
+        console.log('[SSE] text_start messageEl created, inDOM=', document.getElementById('messages').contains(messageEl));
+        scrollBottom();
+        break;
+      }
+
+      case 'text_delta': {
+        if (messageEl) {
+          messageTextBuf += data.text || '';
+          const textNode = messageEl.querySelector('.msg-text');
+          if (textNode) {
+            textNode.textContent = messageTextBuf;
+            scrollBottom();
+          }
+        } else if (data.text) {
+          console.warn('[SSE] text_delta but messageEl is null! text=', data.text.substring(0,30));
+        }
+        break;
+      }
+
+      case 'text_end': {
+        console.log('[SSE] text_end bufLen=', messageTextBuf.length, 'trimEmpty=', !messageTextBuf.trim(), 'hasEl=', !!messageEl);
+        if (messageEl) {
+          if (!messageTextBuf.trim()) {
+            messageEl.remove();
+            console.log('[SSE] text_end 空文本,已移除 messageEl!');
+          }
+          messageEl = null;
+          messageTextBuf = '';
+        }
+        break;
+      }
+
+      case 'tool_call': {
+        addToolCall(data);
+        bumpSidebarBadge(1);
+        if (typingShown) { hideTyping(); typingShown = false; }
+        hadAnyOutput = true;
+        toolBlockEl = createToolBlock(data.name, currentAgent);
+        toolBlockBodyEl = toolBlockEl.querySelector('.tool-body');
+        toolDetailsBuf = [];
+        const inputStr = data.input ? JSON.stringify(data.input, null, 2) : '{}';
+        toolBlockBodyEl.innerHTML = `
+          <div class="field-label">输入</div>
+          <pre>${escapeHtml(inputStr)}</pre>
+          <div class="tool-detail-list"></div>
+          <div class="tool-output-slot"></div>
+        `;
+        toolBlockEl.open = false;
+        document.getElementById('messages').appendChild(toolBlockEl);
+        scrollBottom();
+        break;
+      }
+
+      case 'tool_detail': {
+        addToolDetail(data);
+        if (toolBlockBodyEl && data.detail) {
+          toolDetailsBuf.push(data.detail);
+          const listEl = toolBlockBodyEl.querySelector('.tool-detail-list');
+          if (listEl) {
+            const div = document.createElement('div');
+            div.className = 'detail-line';
+            div.textContent = '• ' + data.detail;
+            listEl.appendChild(div);
+          }
+          scrollBottom();
+        }
+        break;
+      }
+
+      case 'tool_result': {
+        updateToolResult(data);
+        if (toolBlockEl) {
+          const outputSlot = toolBlockEl.querySelector('.tool-output-slot');
+          if (outputSlot && data.output) {
+            const blocked = data.blocked === true;
+            outputSlot.innerHTML = `
+              <div class="field-label">${blocked ? '拦截原因' : '输出'}</div>
+              <pre>${escapeHtml(data.output)}</pre>
+            `;
+          }
+          const statusTag = toolBlockEl.querySelector('.tool-status-tag');
+          if (statusTag) {
+            const spinner = toolBlockEl.querySelector('.tool-spinner');
+            if (spinner) spinner.remove();
+            if (data.blocked === true) {
+              statusTag.textContent = '已拦截';
+              statusTag.className = 'tool-status-tag blocked';
+            } else {
+              statusTag.textContent = '已完成';
+              statusTag.className = 'tool-status-tag ok';
+            }
+          }
+          toolBlockEl = null;
+          toolBlockBodyEl = null;
+          toolDetailsBuf = [];
+        }
+        break;
+      }
+
+      case 'todos_updated':
+        updateTodos(data.todos || []);
+        break;
+
+      case 'permission_blocked':
+        addPermissionBlock(data);
+        bumpSidebarBadge(1);
+        break;
+
+      case 'order_submitted':
+        addOrderEvent(data);
+        bumpSidebarBadge(1);
+        break;
+
+      case 'transfer_human':
+        addTransferEvent(data);
+        bumpSidebarBadge(1);
+        break;
+
+      case 'agent_changed': {
+        addAgentChangedEvent(data);
+        bumpSidebarBadge(1);
+        if (data.from && data.to) {
+          addAgentSwitchDivider(data.from, data.to);
+        }
+        currentAgent = data.to || currentAgent;
+        updateAgentIndicator(currentAgent);
+        lastAgent = data.to || lastAgent;
+        hadAnyOutput = false;
+        break;
+      }
+
+      case 'error': {
+        if (typingShown) { hideTyping(); typingShown = false; }
+        addMessage('error', '错误: ' + (data.error || '未知错误'));
+        if (data.traceback) console.error(data.traceback);
+        break;
+      }
+
+      case 'done': {
+        if (typingShown) { hideTyping(); typingShown = false; }
+        updateAgentIndicator(data.active_agent || currentAgent);
+        break;
+      }
+    }
+  }
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+
+      let idx;
+      while ((idx = buffer.indexOf('\n\n')) !== -1) {
+        const chunk = buffer.slice(0, idx);
+        buffer = buffer.slice(idx + 2);
+        let eventType = 'message';
+        let dataLines = [];
+        for (const line of chunk.split('\n')) {
+          if (line.startsWith('event:')) {
+            eventType = line.slice(6).trim();
+          } else if (line.startsWith('data:')) {
+            dataLines.push(line.slice(5).trim());
+          }
+        }
+        if (dataLines.length > 0) {
+          handleEvent(eventType, dataLines.join('\n'));
+        }
+      }
+    }
+  } finally {
+    if (typingShown) { hideTyping(); }
+  }
+}
+
+// ── Create a collapsible thinking block ──
+function createThinkingBlock(agent) {
+  const div = document.createElement('details');
+  div.className = agent === 'im' ? 'thinking-block im' : 'thinking-block';
+  div.innerHTML = `
+    <summary>
+      <span class="think-label">
+        <span class="think-spinner"></span>
+        💭 思考中...
+      </span>
+    </summary>
+    <div class="think-body"></div>
+  `;
+  return div;
+}
+
+// ── Create an empty streaming message bubble (text filled by deltas) ──
+function createStreamingMessage(agent) {
+  const container = document.getElementById('messages');
+  const welcome = document.getElementById('welcome');
+  if (welcome) welcome.remove();
+
+  const div = document.createElement('div');
+  div.className = agent === 'im' ? 'msg agent im' : 'msg agent';
+  const label = agent === 'im' ? '[IMAgent]' : '[PhoneAgent]';
+  div.innerHTML = `<div class="role-tag">${label}</div><span class="msg-text"></span>`;
+  return div;
+}
+
+// ── Create a collapsible tool-call block (inline in chat) ──
+function createToolBlock(toolName, agent) {
+  const container = document.getElementById('messages');
+  const welcome = document.getElementById('welcome');
+  if (welcome) welcome.remove();
+
+  const isIm = agent === 'im';
+  const div = document.createElement('details');
+  div.className = isIm ? 'tool-block im-tool' : 'tool-block';
+  const icon = '🔧';
+  div.innerHTML = `
+    <summary>
+      <span class="tool-label">
+        <span class="tool-spinner"></span>
+        ${icon} ${escapeHtml(toolName)}
+      </span>
+      <span class="tool-status-tag running">执行中</span>
+    </summary>
+    <div class="tool-body"></div>
+  `;
+  return div;
 }
 
 // ── Reset ──
@@ -790,6 +1521,7 @@ async function resetSession() {
         <input type="text" id="customerPhone" placeholder="如:13800000001" autocomplete="off">
         <div class="form-error" id="formError"></div>
         <button type="button" onclick="startSession()" id="startBtn">开始外呼</button>
+        <button type="button" onclick="testImHandoff()" id="testImBtn" style="margin-top:8px;background:transparent;border:1px dashed var(--border);color:var(--text-dim);font-size:12px">测试 IM handoff(调试用)</button>
       </form>
       <div class="arch-hint">
         <span class="phone-c">PhoneAgent</span> 电话阶段 → handoff_to_im →
@@ -804,9 +1536,13 @@ async function resetSession() {
     document.getElementById('toolCount').textContent = '0';
     document.getElementById('permCount').textContent = '0';
     toolCallCounter = 0;
+    sidebarBadgeCount = 0;
+    updateSidebarBadge();
     currentAgent = 'phone';
     updateAgentIndicator('phone');
     setInputEnabled(false);
+    // Close sidebar drawer if open
+    toggleSidebar(false);
   } catch (err) {
     alert('重置失败: ' + err.message);
   }
@@ -922,10 +1658,12 @@ function updateAgentIndicator(activeAgent) {
 // ── Process events ──
 function processEvents(events) {
   let permCount = 0;
+  let newEventCount = 0;
 
   events.forEach(ev => {
     if (ev.type === 'tool_call') {
       addToolCall(ev);
+      newEventCount++;
     } else if (ev.type === 'tool_result') {
       updateToolResult(ev);
     } else if (ev.type === 'tool_detail') {
@@ -933,19 +1671,25 @@ function processEvents(events) {
     } else if (ev.type === 'permission_blocked') {
       addPermissionBlock(ev);
       permCount++;
+      newEventCount++;
     } else if (ev.type === 'order_submitted') {
       addOrderEvent(ev);
       permCount++;
+      newEventCount++;
     } else if (ev.type === 'transfer_human') {
       addTransferEvent(ev);
       permCount++;
+      newEventCount++;
     } else if (ev.type === 'agent_changed') {
       addAgentChangedEvent(ev);
       permCount++;
+      newEventCount++;
     }
   });
 
   document.getElementById('permCount').textContent = permCount;
+  // Bump mobile sidebar badge so user knows there's new activity to look at
+  if (newEventCount > 0) bumpSidebarBadge(newEventCount);
 }
 
 function updateTodos(todos) {

@@ -21,7 +21,7 @@ _spec.loader.exec_module(_mod)
 while _script_dir in sys.path:
     sys.path.remove(_script_dir)
 
-from flask import Flask, request, jsonify, render_template
+from flask import Flask, request, jsonify, render_template, Response, stream_with_context
 
 # ═══════════════════════════════════════════════════════════
 #  从 code.py 导入常量和函数
@@ -75,6 +75,11 @@ def build_initial_prompt(customer_name: str = "", customer_phone: str = "") -> s
         "请开始对话——按开场白流程:先确认身份(\"请问是 {客户姓名} 吗\"),"
         "客户确认后自报家门(公司做车抵贷),寒暄一句,再询问是否有资金需求。\n"
         "根据客户回应推进流程。需要时用 load_skill 加载 loan-sales 流程。)"
+        "\n\n"
+        "重要:你的 text 输出就是**说给客户听的话**,会直接播放/显示给客户。"
+        "不要输出任何自我陈述、内心独白、流程说明、计划描述(如\"现在等待客户回应\""
+        "\"接下来我要询问意向\"等)。这些思考放到 thinking 块里。"
+        "text 里只允许出现你当面跟客户说的话。"
     )
 
 
@@ -334,6 +339,198 @@ def web_agent_loop(session: dict) -> tuple[list[str], list, list]:
 
 
 # ═══════════════════════════════════════════════════════════
+#  Web 版 Agent Loop — SSE 流式版,支持 thinking + text + tool_use
+# ═══════════════════════════════════════════════════════════
+
+def _sse(event: str, data: dict) -> str:
+    """格式化为 SSE 事件块"""
+    # 调试日志:记录非 delta 事件(delta 太多会刷屏)
+    if event not in ('thinking_delta', 'text_delta'):
+        # 提取关键字段
+        keys = {k: data[k] for k in ('agent', 'name', 'from', 'to', 'active_agent', 'blocked', 'reason') if k in data}
+        print(f"[SSE-LOG] {event} {keys}", flush=True)
+    elif event == 'text_delta':
+        # text_delta 只记录长度,不打内容
+        print(f"[SSE-LOG] text_delta len={len(data.get('text', ''))} text={repr(data.get('text','')[:40])}", flush=True)
+    return f"event: {event}\ndata: {json.dumps(data, ensure_ascii=False)}\n\n"
+
+
+def web_agent_loop_stream(session: dict):
+    """SSE 流式版 agent loop。yield 出 SSE 文本块。
+    检测到 handoff_to_im 时切换到 IMAgent 并继续流式。
+    """
+    current_agent = session["active_agent"]
+    if current_agent == "phone":
+        system, tools, history = PHONE_SYSTEM, PHONE_TOOLS, session["phone_history"]
+    else:
+        system, tools, history = IM_SYSTEM, IM_TOOLS, session["im_history"]
+
+    yield _sse("agent_start", {"agent": current_agent})
+
+    while True:
+        # ── 用 stream API 流式拉取模型输出 ──
+        try:
+            stream_ctx = client.messages.stream(
+                model=MODEL, system=system, messages=history,
+                tools=tools, max_tokens=8000,
+            )
+        except TypeError:
+            # 旧版 SDK 不支持 stream(),fallback 到非流式
+            response = client.messages.create(
+                model=MODEL, system=system, messages=history,
+                tools=tools, max_tokens=8000,
+            )
+            history.append({"role": "assistant", "content": response.content})
+            for block in response.content:
+                if getattr(block, "type", None) == "text" and block.text.strip():
+                    yield _sse("text_start", {"agent": current_agent})
+                    yield _sse("text_delta", {"text": block.text})
+                    yield _sse("text_end", {})
+            stop_reason = response.stop_reason
+            tool_blocks = [b for b in response.content if getattr(b, "type", None) == "tool_use"]
+        else:
+            tool_blocks = []
+            stop_reason = None
+            with stream_ctx as stream:
+                current_block_type = None
+                current_tool_name = None
+                current_tool_input_str = ""
+
+                for event in stream:
+                    etype = getattr(event, "type", None)
+
+                    if etype == "content_block_start":
+                        block = event.content_block
+                        btype = getattr(block, "type", None)
+                        current_block_type = btype
+                        if btype == "thinking":
+                            yield _sse("thinking_start", {"agent": current_agent})
+                        elif btype == "text":
+                            yield _sse("text_start", {"agent": current_agent})
+                        elif btype == "tool_use":
+                            current_tool_name = getattr(block, "name", "")
+                            current_tool_input_str = ""
+
+                    elif etype == "content_block_delta":
+                        delta = event.delta
+                        dtype = getattr(delta, "type", None)
+                        if dtype == "thinking_delta":
+                            yield _sse("thinking_delta", {"text": getattr(delta, "thinking", "")})
+                        elif dtype == "text_delta":
+                            yield _sse("text_delta", {"text": getattr(delta, "text", "")})
+                        elif dtype == "input_json_delta":
+                            current_tool_input_str += getattr(delta, "partial_json", "")
+
+                    elif etype == "content_block_stop":
+                        if current_block_type == "thinking":
+                            yield _sse("thinking_end", {})
+                        elif current_block_type == "text":
+                            yield _sse("text_end", {})
+                        elif current_block_type == "tool_use":
+                            try:
+                                tool_input = json.loads(current_tool_input_str) if current_tool_input_str else {}
+                            except json.JSONDecodeError:
+                                tool_input = {}
+                            tool_blocks.append({
+                                "id": getattr(event, "index", len(tool_blocks)),
+                                "name": current_tool_name,
+                                "input": tool_input,
+                            })
+                        current_block_type = None
+                        current_tool_name = None
+                        current_tool_input_str = ""
+
+                    elif etype == "message_stop":
+                        pass
+
+                final_msg = stream.get_final_message()
+                history.append({"role": "assistant", "content": final_msg.content})
+                stop_reason = final_msg.stop_reason
+
+        # ── 非工具调用 → 结束 ──
+        if stop_reason != "tool_use":
+            break
+
+        # ── 检测 handoff_to_im ──
+        handoff_summary = None
+        for tb in tool_blocks:
+            if tb["name"] == "handoff_to_im":
+                handoff_summary = tb["input"].get("customer_summary", "")
+                break
+
+        # ── 执行工具 ──
+        results = []
+        for tb in tool_blocks:
+            name = tb["name"]
+            input_data = tb["input"]
+            tool_use_id = tb.get("id", "")
+            if not isinstance(tool_use_id, str):
+                tool_use_id = f"toolu_{current_agent}_{int(time.time()*1000)}_{tool_blocks.index(tb)}"
+
+            yield _sse("tool_call", {"name": name, "input": input_data})
+
+            # ── Permission Hook: submit_order 门禁 ──
+            blocked = None
+            if name == "submit_order":
+                order = input_data.get("order_data", {})
+                missing = [f for f in REQUIRED_FIELDS if not order.get(f)]
+                if missing:
+                    blocked = (
+                        f"Permission denied: 缺少必填字段 {missing},"
+                        f"请先收集齐再提交。当前已收集: {list(order.keys())}"
+                    )
+                    yield _sse("permission_blocked", {
+                        "tool": "submit_order",
+                        "reason": f"缺少字段: {', '.join(missing)}",
+                    })
+
+            if blocked:
+                results.append({
+                    "type": "tool_result",
+                    "tool_use_id": tool_use_id,
+                    "content": str(blocked),
+                })
+                yield _sse("tool_result", {"name": name, "output": str(blocked), "blocked": True})
+                continue
+
+            events_buf = []
+            output = execute_tool(name, input_data, session, events_buf)
+            for ev in events_buf:
+                yield _sse(ev["type"], ev)
+            yield _sse("tool_result", {"name": name, "output": output})
+
+            results.append({
+                "type": "tool_result",
+                "tool_use_id": tool_use_id,
+                "content": output,
+            })
+
+        history.append({"role": "user", "content": results})
+
+        # ── handoff:切换到 IMAgent,递归继续流式 ──
+        if handoff_summary is not None:
+            session["active_agent"] = "im"
+            session["handoff_summary"] = handoff_summary
+            session["im_history"] = [{
+                "role": "user",
+                "content": (
+                    f"(场景:你是 IMAgent,PhoneAgent 已完成电话阶段的初筛和加好友,"
+                    f"现在切换到微信沟通。\n"
+                    f"PhoneAgent 传来的客户信息总结:\n{handoff_summary}\n\n"
+                    "请基于以上信息,开始与客户在微信上沟通。第一步是收集行驶证照片。\n"
+                    "需要时用 load_skill 加载 loan-sales 流程。)"
+                ),
+            }]
+            yield _sse("agent_changed", {
+                "from": "phone", "to": "im", "summary": handoff_summary,
+            })
+            yield from web_agent_loop_stream(session)
+            break
+
+    yield _sse("done", {"active_agent": session["active_agent"]})
+
+
+# ═══════════════════════════════════════════════════════════
 #  Routes
 # ═══════════════════════════════════════════════════════════
 
@@ -344,7 +541,7 @@ def index():
 
 @app.route("/api/start", methods=["POST"])
 def start_session():
-    """开始会话:接收客户姓名+手机号,初始化 phone_history,触发 PhoneAgent 第一轮开口"""
+    """开始会话:SSE 流式返回 PhoneAgent 的输出"""
     data = request.get_json(force=True)
     customer_name = (data.get("customer_name") or "").strip()
     customer_phone = (data.get("customer_phone") or "").strip()
@@ -359,27 +556,31 @@ def start_session():
     session["active_agent"] = "phone"
     session["started"] = True
 
-    try:
-        agent_texts, events, segments = web_agent_loop(session)
-        return jsonify({
-            "session_id": session_id,
-            "agent_text": "\n\n".join(agent_texts),
-            "agent_segments": segments,
-            "events": events,
-            "todos": session["todos"],
-            "active_agent": session["active_agent"],
-        })
-    except Exception as e:
-        import traceback
-        return jsonify({
-            "error": str(e),
-            "traceback": traceback.format_exc(),
-        }), 500
+    def generate():
+        yield _sse("session", {"session_id": session_id})
+        try:
+            yield from web_agent_loop_stream(session)
+        except Exception as e:
+            import traceback
+            yield _sse("error", {
+                "error": str(e),
+                "traceback": traceback.format_exc(),
+            })
+
+    return Response(
+        stream_with_context(generate()),
+        mimetype="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+            "Connection": "keep-alive",
+        },
+    )
 
 
 @app.route("/api/chat", methods=["POST"])
 def chat():
-    """接收 session_id + message,根据 active_agent 路由到对应 agent loop"""
+    """接收 session_id + message,SSE 流式返回 agent 输出"""
     data = request.get_json(force=True)
     session_id = data.get("session_id")
     message = data.get("message", "")
@@ -387,7 +588,6 @@ def chat():
     session_id, session = get_or_create_session(session_id)
 
     if session["started"] and message.strip():
-        # 路由消息到当前活跃 agent 的 history
         if session["active_agent"] == "phone":
             session["phone_history"].append({"role": "user", "content": message})
         else:
@@ -395,22 +595,26 @@ def chat():
 
     session["started"] = True
 
-    try:
-        agent_texts, events, segments = web_agent_loop(session)
-        return jsonify({
-            "session_id": session_id,
-            "agent_text": "\n\n".join(agent_texts),
-            "agent_segments": segments,
-            "events": events,
-            "todos": session["todos"],
-            "active_agent": session["active_agent"],
-        })
-    except Exception as e:
-        import traceback
-        return jsonify({
-            "error": str(e),
-            "traceback": traceback.format_exc(),
-        }), 500
+    def generate():
+        yield _sse("session", {"session_id": session_id})
+        try:
+            yield from web_agent_loop_stream(session)
+        except Exception as e:
+            import traceback
+            yield _sse("error", {
+                "error": str(e),
+                "traceback": traceback.format_exc(),
+            })
+
+    return Response(
+        stream_with_context(generate()),
+        mimetype="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+            "Connection": "keep-alive",
+        },
+    )
 
 
 @app.route("/api/reset", methods=["POST"])
@@ -421,6 +625,54 @@ def reset():
         del SESSIONS[session_id]
     new_id, _ = get_or_create_session()
     return jsonify({"session_id": new_id, "message": "会话已重置"})
+
+
+@app.route("/api/test_im")
+def test_im():
+    """测试端点:直接构造一个已 handoff 的 IMAgent session,SSE 流式返回。
+    用于排查 IMAgent 阶段文本是否正常显示。"""
+    session = {
+        "customer_name": "测试IM", "customer_phone": "13800000001",
+        "active_agent": "im",
+        "handoff_summary": "客户张先生,电话13800000001,同意加微信,微信账号:zhang_test",
+        "phone_history": [{"role": "user", "content": "开始"}],
+        "im_history": [{
+            "role": "user",
+            "content": (
+                "(场景:你是 IMAgent,PhoneAgent 已完成电话阶段的初筛和加好友,"
+                "现在切换到微信沟通。\n"
+                "PhoneAgent 传来的客户信息总结:\n客户张先生,同意加微信\n\n"
+                "请基于以上信息,开始与客户在微信上沟通。第一步是收集行驶证照片。\n"
+                "需要时用 load_skill 加载 loan-sales 流程。)"
+            ),
+        }],
+        "todos": [], "started": True,
+    }
+
+    def generate():
+        yield _sse("session", {"session_id": "test-im-session"})
+        yield _sse("agent_changed", {
+            "from": "phone", "to": "im",
+            "summary": "客户张先生,同意加微信",
+        })
+        try:
+            yield from web_agent_loop_stream(session)
+        except Exception as e:
+            import traceback
+            yield _sse("error", {
+                "error": str(e),
+                "traceback": traceback.format_exc(),
+            })
+
+    return Response(
+        stream_with_context(generate()),
+        mimetype="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+            "Connection": "keep-alive",
+        },
+    )
 
 
 # ═══════════════════════════════════════════════════════════
