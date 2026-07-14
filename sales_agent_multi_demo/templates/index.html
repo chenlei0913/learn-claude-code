@@ -448,7 +448,9 @@
     font-size: 14px;
     font-family: inherit;
     resize: none;
-    max-height: 120px;
+    height: 40px;
+    overflow: hidden;
+    white-space: nowrap;
     transition: border-color .2s;
   }
   .chat-input textarea:focus { outline: none; border-color: var(--accent-dim); }
@@ -984,8 +986,8 @@
       </div>
     </div>
     <div class="chat-input">
-      <textarea id="input" rows="1" placeholder="输入客户回复... (Enter 发送, Shift+Enter 换行)" disabled
-        onkeydown="handleKey(event)" oninput="autoResize(this)"></textarea>
+      <textarea id="input" rows="1" placeholder="输入客户回复... (Enter 发送)" disabled
+        onkeydown="handleKey(event)"></textarea>
       <button id="sendBtn" onclick="sendMessage()" disabled>发送</button>
     </div>
   </div>
@@ -1680,13 +1682,8 @@ function escapeHtml(text) {
   return div.innerHTML;
 }
 
-function autoResize(textarea) {
-  textarea.style.height = 'auto';
-  textarea.style.height = Math.min(textarea.scrollHeight, 120) + 'px';
-}
-
 function handleKey(e) {
-  if (e.key === 'Enter' && !e.shiftKey) {
+  if (e.key === 'Enter') {
     e.preventDefault();
     sendMessage();
   }
