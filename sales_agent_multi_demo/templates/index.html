@@ -149,6 +149,7 @@
     display: flex;
     flex-direction: column;
     min-width: 0;
+    min-height: 0;
   }
   .chat-messages {
     flex: 1;
@@ -157,6 +158,7 @@
     display: flex;
     flex-direction: column;
     gap: 16px;
+    min-height: 0;
   }
   .chat-messages::-webkit-scrollbar { width: 6px; }
   .chat-messages::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
@@ -525,6 +527,19 @@
     color: var(--text-dim);
     transition: all .3s ease;
     position: relative;
+    cursor: pointer;
+    user-select: none;
+  }
+  .agent-badge:hover { border-color: var(--text-dim); }
+  .agent-badge.phone.selected {
+    background: rgba(78,205,196,.10);
+    border-color: var(--phone-agent);
+    border-style: dashed;
+  }
+  .agent-badge.im.selected {
+    background: rgba(167,139,250,.10);
+    border-color: var(--im-agent);
+    border-style: dashed;
   }
   .agent-badge .agent-role {
     font-size: 10px;
@@ -982,12 +997,12 @@
     <div class="sidebar-section">
       <h3>当前 Agent</h3>
       <div class="agent-indicators">
-        <div class="agent-badge phone active" id="agentPhone">
+        <div class="agent-badge phone active" id="agentPhone" onclick="toggleAgentFilter('phone')">
           <span class="pulse"></span>
           PhoneAgent
           <div class="agent-role">电话:初筛+加好友</div>
         </div>
-        <div class="agent-badge im" id="agentIM">
+        <div class="agent-badge im" id="agentIM" onclick="toggleAgentFilter('im')">
           <span class="pulse"></span>
           IMAgent
           <div class="agent-role">IM:收资料+下单</div>
@@ -1027,6 +1042,31 @@ let isWaiting = false;
 let toolCallCounter = 0;
 let currentAgent = 'phone';   // 追踪当前活跃 agent(用于 typing indicator 颜色)
 let sidebarBadgeCount = 0;    // 移动端:sidebar 关闭时累计的未看事件数
+let selectedAgent = null;     // 侧边栏过滤: null=全部, 'phone'=只看电话, 'im'=只看IM
+let latestTodos = [];         // 缓存最新的 todos,供过滤后重新渲染
+let userAtBottom = true;      // 用户是否在底部(控制自动滚动)
+let isAutoScrolling = false;  // 正在程序自动滚动(忽略 scroll 事件)
+let lastScrollTop = 0;        // 上次 scrollTop,用于判断滚动方向
+
+// 监听用户手动滚动,更新 userAtBottom 标志
+document.addEventListener('DOMContentLoaded', () => {
+  const c = document.getElementById('messages');
+  if (c) {
+    c.addEventListener('scroll', () => {
+      if (isAutoScrolling) return;
+      const distFromBottom = c.scrollHeight - c.scrollTop - c.clientHeight;
+      const delta = c.scrollTop - lastScrollTop;
+      // 用户往下滚且接近底部(200px内) → 重新启用自动滚动
+      // 用户往上滚 → 关闭自动滚动
+      if (delta > 0 && distFromBottom < 200) {
+        userAtBottom = true;
+      } else if (delta < 0) {
+        userAtBottom = false;
+      }
+      lastScrollTop = c.scrollTop;
+    });
+  }
+});
 
 // ── Mobile sidebar drawer toggle ──
 function toggleSidebar(open) {
@@ -1245,12 +1285,27 @@ async function processSSEResponse(resp) {
 
       case 'thinking_end': {
         if (thinkingEl) {
+          // 折叠前记录滚动位置,折叠后补偿高度差,避免视图跳动
+          const c = document.getElementById('messages');
+          const oldScrollHeight = c.scrollHeight;
+          const wasAtBottom = userAtBottom;
+
           thinkingEl.open = false;
           const spinner = thinkingEl.querySelector('.think-spinner');
           if (spinner) spinner.remove();
           const labelEl = thinkingEl.querySelector('.think-label');
           if (labelEl) {
             labelEl.innerHTML = `💭 思考过程 (${thinkingTextBuf.length} 字)`;
+          }
+
+          // 折叠导致高度减小,如果用户不在底部,补偿 scrollTop 保持视图
+          if (!wasAtBottom) {
+            const heightDiff = oldScrollHeight - c.scrollHeight;
+            if (heightDiff > 0) {
+              isAutoScrolling = true;
+              c.scrollTop -= heightDiff;
+              requestAnimationFrame(() => { isAutoScrolling = false; });
+            }
           }
           thinkingEl = null;
           thinkingBodyEl = null;
@@ -1612,8 +1667,11 @@ function setInputEnabled(enabled) {
 }
 
 function scrollBottom() {
+  if (!userAtBottom) return;
   const c = document.getElementById('messages');
+  isAutoScrolling = true;
   c.scrollTop = c.scrollHeight;
+  requestAnimationFrame(() => { isAutoScrolling = false; });
 }
 
 function escapeHtml(text) {
@@ -1655,6 +1713,38 @@ function updateAgentIndicator(activeAgent) {
   }
 }
 
+// ── Agent badge filter: 点击徽章过滤侧边栏工具/事件 ──
+function toggleAgentFilter(agent) {
+  if (selectedAgent === agent) {
+    selectedAgent = null;  // 再次点击同一徽章 → 取消过滤
+  } else {
+    selectedAgent = agent;
+  }
+  applyAgentFilter();
+}
+
+function applyAgentFilter() {
+  const phoneEl = document.getElementById('agentPhone');
+  const imEl = document.getElementById('agentIM');
+  phoneEl.classList.toggle('selected', selectedAgent === 'phone');
+  imEl.classList.toggle('selected', selectedAgent === 'im');
+
+  // 过滤工具调用和事件列表
+  ['toolList', 'permList'].forEach(listId => {
+    const items = document.getElementById(listId).querySelectorAll('[data-agent]');
+    items.forEach(item => {
+      if (selectedAgent === null) {
+        item.style.display = '';
+      } else {
+        item.style.display = item.dataset.agent === selectedAgent ? '' : 'none';
+      }
+    });
+  });
+
+  // 重新渲染流程进度(按 selectedAgent 过滤)
+  renderTodos();
+}
+
 // ── Process events ──
 function processEvents(events) {
   let permCount = 0;
@@ -1693,16 +1783,28 @@ function processEvents(events) {
 }
 
 function updateTodos(todos) {
-  const container = document.getElementById('todoList');
-  document.getElementById('todoCount').textContent = todos.length;
+  latestTodos = todos || [];
+  renderTodos();
+}
 
-  if (!todos || todos.length === 0) {
-    container.innerHTML = '<div class="empty-hint">等待 Agent 建立流程清单...</div>';
+function renderTodos() {
+  const container = document.getElementById('todoList');
+  // 按 selectedAgent 过滤(无标签的视为当前 agent)
+  const filtered = selectedAgent
+    ? latestTodos.filter(t => (t.agent || currentAgent) === selectedAgent)
+    : latestTodos;
+  document.getElementById('todoCount').textContent = filtered.length;
+
+  if (filtered.length === 0) {
+    const hint = selectedAgent
+      ? `${selectedAgent === 'phone' ? 'PhoneAgent' : 'IMAgent'} 阶段暂无流程进度`
+      : '等待 Agent 建立流程清单...';
+    container.innerHTML = `<div class="empty-hint">${hint}</div>`;
     return;
   }
 
   const icons = { pending: '○', in_progress: '▶', completed: '✓' };
-  container.innerHTML = todos.map(t => `
+  container.innerHTML = filtered.map(t => `
     <div class="todo-item">
       <div class="todo-icon ${t.status}">${icons[t.status] || '○'}</div>
       <span class="todo-text ${t.status}">${escapeHtml(t.content)}</span>
@@ -1726,6 +1828,7 @@ function addToolCall(ev) {
   div.className = isImTool ? 'tool-item im-tool' : 'tool-item';
   div.id = `tool-${toolCallCounter}`;
   div.dataset.name = ev.name;
+  div.dataset.agent = currentAgent;
 
   const inputStr = ev.input ? JSON.stringify(ev.input, null, 2) : '{}';
 
@@ -1789,6 +1892,7 @@ function addPermissionBlock(ev) {
 
   const div = document.createElement('div');
   div.className = 'perm-item';
+  div.dataset.agent = currentAgent;
   div.innerHTML = `
     <span class="perm-tool">⛔ ${escapeHtml(ev.tool || '未知')}</span>
     <div class="perm-reason">${escapeHtml(ev.reason || '')}</div>
@@ -1803,6 +1907,7 @@ function addOrderEvent(ev) {
 
   const div = document.createElement('div');
   div.className = 'order-item';
+  div.dataset.agent = currentAgent;
   div.innerHTML = `
     <span class="order-id">✓ 订单已提交: ${escapeHtml(ev.order_id || '')}</span>
     <div style="color:var(--text-dim);margin-top:2px;">客户: ${escapeHtml(ev.order_data?.name || '')} | 身份证: ${escapeHtml(ev.order_data?.id_card || 'N/A')}</div>
@@ -1817,6 +1922,7 @@ function addTransferEvent(ev) {
 
   const div = document.createElement('div');
   div.className = 'transfer-item';
+  div.dataset.agent = currentAgent;
   div.textContent = `转人工: ${escapeHtml(ev.reason || '')}`;
   container.appendChild(div);
 }
@@ -1831,6 +1937,7 @@ function addAgentChangedEvent(ev) {
 
   const div = document.createElement('div');
   div.className = 'agent-changed-item';
+  div.dataset.agent = currentAgent;
   div.innerHTML = `🔄 Agent 切换: <span class="from-label">${fromLabel}</span> → <span class="to-label">${toLabel}</span>`;
   container.appendChild(div);
 }

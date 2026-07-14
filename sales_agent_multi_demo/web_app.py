@@ -91,7 +91,9 @@ def get_or_create_session(session_id: str | None = None):
         "phone_history": [],         # PhoneAgent 的独立 history
         "im_history": [],            # IMAgent 的独立 history
         "active_agent": "phone",     # "phone" | "im"
-        "todos": [],
+        "phone_todos": [],           # PhoneAgent 的流程进度
+        "im_todos": [],              # IMAgent 的流程进度
+        "todos": [],                 # 合并视图(兼容)
         "started": False,
         "friend_status": "pending",
         "friend_request_count": 0,
@@ -136,28 +138,47 @@ def execute_tool(name: str, input_data: dict, session: dict, events: list) -> st
         if error:
             output = error
         else:
-            session["todos"] = [dict(t) for t in normalized]
+            agent = session["active_agent"]
+            # 给每项打上 agent 标签,按 agent 分开存储
+            tagged = [dict(t, agent=agent) for t in normalized]
+            if agent == "phone":
+                session["phone_todos"] = tagged
+            else:
+                session["im_todos"] = tagged
+            # 合并视图(电话阶段 + IM 阶段)
+            session["todos"] = session["phone_todos"] + session["im_todos"]
             events.append({"type": "todos_updated", "todos": session["todos"]})
             output = f"已更新 {len(normalized)} 个阶段状态"
 
     elif name == "send_friend_request":
         session["friend_request_count"] += 1
         count = session["friend_request_count"]
+        # 如果客户更正了手机号,更新 session
+        new_phone = input_data.get("phone", "").strip()
+        phone_note = ""
+        if new_phone and new_phone != session.get("customer_phone", ""):
+            session["customer_phone"] = new_phone
+            phone_note = f"(已更新手机号为 {new_phone})"
         if session["friend_status"] != "added":
             session["friend_status"] = "pending"
             _start_friend_check_thread(session)
-        output = f"已发送添加好友请求(第 {count} 次)。后台正在每5秒检测一次是否添加成功。"
+        target_phone = session.get("customer_phone", "")
+        tail = target_phone[-4:] if len(target_phone) >= 4 else target_phone
+        output = f"已发送添加好友请求(第 {count} 次),目标手机号尾号 {tail}{(' ' + phone_note) if phone_note else ''}。后台正在每5秒检测一次是否添加成功。"
         events.append({
             "type": "tool_detail",
             "name": name,
-            "detail": f"发送好友请求(第{count}次),后台检测已启动",
+            "detail": f"发送好友请求(第{count}次),尾号{tail}{phone_note}",
             "output_preview": output,
         })
 
     elif name == "check_friend_added":
         status = session.get("friend_status", "pending")
         added = status == "added"
-        output = json.dumps({"status": status, "added": added}, ensure_ascii=False)
+        result = {"status": status, "added": added}
+        if added:
+            result["next_action"] = "好友已添加成功,请立即在同一轮调用 handoff_to_im 工具切换到 IMAgent"
+        output = json.dumps(result, ensure_ascii=False)
         events.append({
             "type": "tool_detail",
             "name": name,
@@ -168,6 +189,15 @@ def execute_tool(name: str, input_data: dict, session: dict, events: list) -> st
     elif name == "handoff_to_im":
         customer_summary = input_data.get("customer_summary", "")
         output = f"已切换到 IMAgent。电话阶段总结已传递: {customer_summary[:100]}..."
+        # 强制更新 phone_todos:加微信好友 + handoff到IM 标记为 completed
+        for t in session["phone_todos"]:
+            content = t.get("content", "")
+            if any(k in content for k in ["加微信", "加好友", "好友"]):
+                t["status"] = "completed"
+            if any(k in content for k in ["handoff", "切换", "移交", "到IM"]):
+                t["status"] = "completed"
+        session["todos"] = session["phone_todos"] + session["im_todos"]
+        events.append({"type": "todos_updated", "todos": session["todos"]})
         events.append({
             "type": "tool_detail",
             "name": name,
@@ -646,7 +676,7 @@ def test_im():
                 "需要时用 load_skill 加载 loan-sales 流程。)"
             ),
         }],
-        "todos": [], "started": True,
+        "phone_todos": [], "im_todos": [], "todos": [], "started": True,
     }
 
     def generate():
