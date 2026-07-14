@@ -105,6 +105,12 @@ def get_or_create_session(session_id: str | None = None):
         "timeout_timer": None,       # threading.Timer 对象
         "agent_lock": threading.Lock(),  # agent_loop 互斥锁(防超时轮和用户轮并发)
         "events_queue": None,        # queue.Queue,超时轮 agent 输出推到这里,供 /api/events 长连接读取
+        "order_submitted": False,    # 订单是否已提交(会话终态之一)
+        "order_id_final": "",        # 最终订单号
+        "order_data_final": {},      # 最终订单数据
+        "transferred": False,        # 是否转人工(会话终态之一)
+        "transfer_reason_final": "",  # 转人工原因
+        "summary_sent": False,       # 是否已发送过 session_summary(避免重复)
     }
     return session_id, SESSIONS[session_id]
 
@@ -288,6 +294,10 @@ def execute_tool(name: str, input_data: dict, session: dict, events: list) -> st
         order_data = input_data.get("order_data", {})
         order_id = f"ORD_{abs(hash(json.dumps(order_data, sort_keys=True))) % 100000:05d}"
         output = f"订单提交成功,订单号: {order_id}"
+        # 记录会话终态
+        session["order_submitted"] = True
+        session["order_id_final"] = order_id
+        session["order_data_final"] = order_data
         events.append({
             "type": "order_submitted",
             "order_id": order_id,
@@ -297,6 +307,9 @@ def execute_tool(name: str, input_data: dict, session: dict, events: list) -> st
     elif name == "transfer_human":
         reason = input_data.get("reason", "")
         output = f"已转人工坐席,原因: {reason}。坐席将在 30 秒内接入。"
+        # 记录会话终态
+        session["transferred"] = True
+        session["transfer_reason_final"] = reason
         events.append({
             "type": "transfer_human",
             "reason": reason,
@@ -443,7 +456,7 @@ def web_agent_loop(session: dict) -> tuple[list[str], list, list]:
 def _sse(event: str, data: dict) -> str:
     """格式化为 SSE 事件块"""
     # 调试日志:记录非 delta 事件(delta 太多会刷屏)
-    if event not in ('thinking_delta', 'text_delta'):
+    if event not in ('thinking_delta', 'text_delta', 'session_summary'):
         # 提取关键字段
         keys = {k: data[k] for k in ('agent', 'name', 'from', 'to', 'active_agent', 'blocked', 'reason') if k in data}
         print(f"[SSE-LOG] {event} {keys}", flush=True)
@@ -451,6 +464,30 @@ def _sse(event: str, data: dict) -> str:
         # text_delta 只记录长度,不打内容
         print(f"[SSE-LOG] text_delta len={len(data.get('text', ''))} text={repr(data.get('text','')[:40])}", flush=True)
     return f"event: {event}\ndata: {json.dumps(data, ensure_ascii=False)}\n\n"
+
+
+def build_session_summary(session: dict) -> dict:
+    """会话结束后构建总结数据。聚合客户信息、车况、订单/转人工结果。"""
+    if session.get("order_submitted"):
+        status = "completed"
+    elif session.get("transferred"):
+        status = "transferred"
+    else:
+        status = "unknown"
+
+    summary = {
+        "status": status,
+        "customer_name": session.get("customer_name", ""),
+        "customer_phone": session.get("customer_phone", ""),
+        "handoff_summary": session.get("handoff_summary", ""),
+        "friend_status": session.get("friend_status", "pending"),
+        "order_submitted": session.get("order_submitted", False),
+        "order_id": session.get("order_id_final", ""),
+        "order_data": session.get("order_data_final", {}),
+        "transferred": session.get("transferred", False),
+        "transfer_reason": session.get("transfer_reason_final", ""),
+    }
+    return summary
 
 
 def web_agent_loop_stream(session: dict):
@@ -626,6 +663,15 @@ def web_agent_loop_stream(session: dict):
             break
 
     yield _sse("done", {"active_agent": session["active_agent"]})
+
+    # 会话到达终态(订单提交/转人工)且未发送过总结 → 发送 session_summary
+    if not session.get("summary_sent") and (
+        session.get("order_submitted") or session.get("transferred")
+    ):
+        session["summary_sent"] = True
+        # 取消电话阶段超时定时器(会话已结束)
+        cancel_reply_timeout(session)
+        yield _sse("session_summary", build_session_summary(session))
 
 
 # ═══════════════════════════════════════════════════════════

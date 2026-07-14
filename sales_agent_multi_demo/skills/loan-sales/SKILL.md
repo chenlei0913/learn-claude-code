@@ -15,7 +15,7 @@ description: 车抵贷电销+IM多Agent流程 — PhoneAgent负责电话初筛+�
 | **IMAgent** | IM沟通:收集行驶证 + 车辆审核 + 收集资料 + 提交订单 | im | load_skill, todo_write, upload_driving_license, submit_order, transfer_human |
 
 **切换机制**:PhoneAgent 完成初筛并确认好友已添加后,调用 `handoff_to_im` 工具。Orchestrator 会:
-1. 提取 PhoneAgent 收集的客户信息(姓名、车况、初筛结果)
+1. 提取 PhoneAgent 收集的客户信息(姓名、车品牌、车况、初筛结果)
 2. 将信息打包成 handoff summary
 3. 切换到 IMAgent,用 handoff summary 初始化 IMAgent 的 history
 
@@ -32,6 +32,12 @@ description: 车抵贷电销+IM多Agent流程 — PhoneAgent负责电话初筛+�
 4. 客户表示方便 → 询问意向:"想了解下您最近有没有资金周转的需求?"
 5. 客户明确拒绝 → 礼貌结束:"好的,那不打扰您了,再见",记录原因,不得二次强推
 6. 客户有兴趣 → 进入初筛
+
+**初筛流程(逐项询问,每问一项等客户回答再问下一项):**
+1. 有无车:"您名下有车吗?" — 无车 → 不通过
+2. 品牌:"什么品牌的车?" — 记录品牌信息
+3. 全款/按揭:"是全款的还是按揭的?"
+4. 绿本:按揭的需确认是否已还清并拿到绿本(机动车登记证书)
 
 **初筛条件(全部满足才通过):**
 - 客户名下有车
